@@ -4,3 +4,6 @@
 [submodule "libs/vulkan-zig"]
 	path = libs/vulkan-zig
 	url = https://github.com/Snektron/vulkan-zig
+[submodule "libs/fontana"]
+	path = libs/fontana
+	url = https://github.com/kdchambers/fontana
