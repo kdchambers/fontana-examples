@@ -24,6 +24,11 @@ pub fn build(b: *Builder) !void {
         .source = .{ .path = "shaders/shaders.zig" },
     });
 
+    exe.addPackage(.{
+        .name = "fontana",
+        .source = .{ .path = "libs/fontana/src/fontana.zig" },
+    });
+
     const gen = vkgen.VkGenerateStep.init(b, "vk.xml", "vk.zig");
     exe.addPackage(gen.package);
 

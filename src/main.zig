@@ -6,7 +6,13 @@ const builtin = @import("builtin");
 const glfw = @import("glfw");
 const vk = @import("vulkan");
 const vulkan_config = @import("vulkan_config.zig");
+
+const fontana = @import("fontana");
+// const graphics = fontana.graphics;
+// const geometry = geometry.geometry;
+
 const graphics = @import("graphics.zig");
+const geometry = @import("geometry.zig");
 
 const shaders = @import("shaders");
 
@@ -18,6 +24,8 @@ const vulkan_engine_version = vk.makeApiVersion(0, 0, 1, 0);
 const vulkan_engine_name = "No engine";
 const vulkan_application_version = vk.makeApiVersion(0, 0, 1, 0);
 const application_name = "fontana tester";
+
+const asset_path_font = "./assets/RobotoMono.ttf";
 
 /// Version of Vulkan to use
 /// https://www.khronos.org/registry/vulkan/
@@ -76,7 +84,7 @@ var texture_image: vk.Image = undefined;
 var texture_vertices_buffer: vk.Buffer = undefined;
 var texture_indices_buffer: vk.Buffer = undefined;
 
-var texture_memory_map: [*]graphics.RGBA(f32) = undefined;
+var texture_memory_map: [*]fontana.graphics.RGBA(f32) = undefined;
 
 const texture_size_bytes = texture_layer_dimensions.width * texture_layer_dimensions.height * @sizeOf(graphics.RGBA(f32));
 
@@ -87,7 +95,7 @@ const TexturePixelBaseType = u16;
 const TextureNormalizedBaseType = f32;
 
 pub fn Dimensions2D(comptime BaseType: type) type {
-    return packed struct {
+    return extern struct {
         height: BaseType,
         width: BaseType,
     };
@@ -143,10 +151,28 @@ pub fn main() !void {
 
     graphics_context.window.setFramebufferSizeCallback(onFramebufferResized);
 
+    var face_writer = quad_face_writer_pool.create(0, vertices_range_size / @sizeOf(graphics.GenericVertex));
+
+    const extent = geometry.Extent2D(f32){
+        .x = 0,
+        .y = 0,
+        .width = (@intToFloat(f32, 512) / @intToFloat(f32, screen_dimensions.width)) * 2.0,
+        .height = (@intToFloat(f32, 512) / @intToFloat(f32, screen_dimensions.height)) * 2.0,
+    };
+
+    const full_texture_extent = geometry.Extent2D(TextureNormalizedBaseType){
+        .x = 0.0,
+        .y = 0.0,
+        .width = 1.0,
+        .height = 1.0,
+    };
+
+    (try face_writer.create()).* = graphics.generateTexturedQuad(graphics.GenericVertex, extent, full_texture_extent, .top_left);
+
     while (!graphics_context.window.shouldClose()) {
         try glfw.pollEvents();
         try graphics_context.device_dispatch.deviceWaitIdle(graphics_context.logical_device);
-        try recordRenderPass(graphics_context, quad_count * indices_per_quad);
+        try recordRenderPass(graphics_context, face_writer.used * indices_per_quad);
         try renderFrame(allocator, &graphics_context);
         std.time.sleep(std.time.ns_per_ms * 16 * 2); // 30 fps
     }
@@ -577,7 +603,7 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
     std.debug.assert(texture_layer_size <= texture_memory_requirements.size);
     {
         var mapped_memory_ptr = (try app.device_dispatch.mapMemory(app.logical_device, image_memory, 0, texture_layer_size, .{})).?;
-        texture_memory_map = @ptrCast([*]graphics.RGBA(f32), @alignCast(4, mapped_memory_ptr));
+        texture_memory_map = @ptrCast([*]fontana.graphics.RGBA(f32), @alignCast(4, mapped_memory_ptr));
 
         // Not sure if this is a hack, but because we multiply the texture sample by the
         // color in the fragment shader, we need pixel in the texture that we known will return 1.0
@@ -587,6 +613,37 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         texture_memory_map[last_index].g = 1.0;
         texture_memory_map[last_index].b = 1.0;
         texture_memory_map[last_index].a = 1.0;
+
+        std.mem.set(fontana.graphics.RGBA(f32), texture_memory_map[0..last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 });
+
+        //
+        // Generate Glyph atlas + write to texture
+        //
+
+        const char_to_render: u8 = 'J';
+
+        const file_handle = try std.fs.cwd().openFile(asset_path_font, .{ .mode = .read_only });
+        defer file_handle.close();
+
+        const file_size = (try file_handle.stat()).size;
+
+        var ttf_buffer = try allocator.alloc(u8, file_size);
+        defer allocator.free(ttf_buffer);
+
+        _ = try file_handle.readAll(ttf_buffer);
+
+        var font = try fontana.otf.parseFromBytes(ttf_buffer);
+        const scale = fontana.otf.scaleForPixelHeight(font, 66);
+        const bitmap = try fontana.otf.rasterizeGlyph(allocator, font, scale, char_to_render);
+        defer allocator.free(bitmap.pixels);
+
+        var y: u32 = 0;
+        while (y < bitmap.height) : (y += 1) {
+            var x: u32 = 0;
+            while (x < bitmap.width) : (x += 1) {
+                texture_memory_map[x + (y * texture_layer_dimensions.width)] = bitmap.pixels[x + (y * bitmap.width)];
+            }
+        }
     }
 
     const barrier = [_]vk.ImageMemoryBarrier{
