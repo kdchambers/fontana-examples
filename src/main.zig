@@ -141,6 +141,25 @@ var vkGetInstanceProcAddr: *const fn (instance: vk.Instance, procname: [*:0]cons
 
 var quad_face_writer_pool: QuadFaceWriterPool(graphics.GenericVertex) = undefined;
 var quad_count: u32 = 0;
+var draw_requested: bool = true;
+
+fn draw() !void {
+    var face_writer = quad_face_writer_pool.create(0, vertices_range_size / @sizeOf(graphics.GenericVertex));
+    const extent = geometry.Extent2D(f32){
+        .x = 0,
+        .y = 0,
+        .width = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.width)),
+        .height = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.height)),
+    };
+    const full_texture_extent = geometry.Extent2D(TextureNormalizedBaseType){
+        .x = 0.0,
+        .y = 0.0,
+        .width = 1.0,
+        .height = 1.0,
+    };
+    (try face_writer.create()).* = graphics.generateTexturedQuad(graphics.GenericVertex, extent, full_texture_extent, .top_left);
+    quad_count = face_writer.used;
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -151,28 +170,14 @@ pub fn main() !void {
 
     graphics_context.window.setFramebufferSizeCallback(onFramebufferResized);
 
-    var face_writer = quad_face_writer_pool.create(0, vertices_range_size / @sizeOf(graphics.GenericVertex));
-
-    const extent = geometry.Extent2D(f32){
-        .x = 0,
-        .y = 0,
-        .width = (@intToFloat(f32, 512) / @intToFloat(f32, screen_dimensions.width)) * 2.0,
-        .height = (@intToFloat(f32, 512) / @intToFloat(f32, screen_dimensions.height)) * 2.0,
-    };
-
-    const full_texture_extent = geometry.Extent2D(TextureNormalizedBaseType){
-        .x = 0.0,
-        .y = 0.0,
-        .width = 1.0,
-        .height = 1.0,
-    };
-
-    (try face_writer.create()).* = graphics.generateTexturedQuad(graphics.GenericVertex, extent, full_texture_extent, .top_left);
-
     while (!graphics_context.window.shouldClose()) {
         try glfw.pollEvents();
         try graphics_context.device_dispatch.deviceWaitIdle(graphics_context.logical_device);
-        try recordRenderPass(graphics_context, face_writer.used * indices_per_quad);
+        if(draw_requested) {
+            draw_requested = false;
+            try draw();
+        }
+        try recordRenderPass(graphics_context, quad_count * indices_per_quad);
         try renderFrame(allocator, &graphics_context);
         std.time.sleep(std.time.ns_per_ms * 16 * 2); // 30 fps
     }
@@ -187,6 +192,7 @@ fn onFramebufferResized(window: glfw.Window, width: u32, height: u32) void {
     screen_dimensions.width = @intCast(u16, width);
     screen_dimensions.height = @intCast(u16, height);
     framebuffer_resized = true;
+    draw_requested = true;
 }
 
 fn cleanup(allocator: std.mem.Allocator, app: *GraphicsContext) void {
@@ -633,7 +639,7 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         _ = try file_handle.readAll(ttf_buffer);
 
         var font = try fontana.otf.parseFromBytes(ttf_buffer);
-        const scale = fontana.otf.scaleForPixelHeight(font, 66);
+        const scale = fontana.otf.scaleForPixelHeight(font, 96);
         const bitmap = try fontana.otf.rasterizeGlyph(allocator, font, scale, char_to_render);
         defer allocator.free(bitmap.pixels);
 
