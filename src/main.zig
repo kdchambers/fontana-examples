@@ -173,7 +173,7 @@ pub fn main() !void {
     while (!graphics_context.window.shouldClose()) {
         try glfw.pollEvents();
         try graphics_context.device_dispatch.deviceWaitIdle(graphics_context.logical_device);
-        if(draw_requested) {
+        if (draw_requested) {
             draw_requested = false;
             try draw();
         }
@@ -620,14 +620,13 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         texture_memory_map[last_index].b = 1.0;
         texture_memory_map[last_index].a = 1.0;
 
-        std.mem.set(fontana.graphics.RGBA(f32), texture_memory_map[0..last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 });
+        std.mem.set(fontana.graphics.RGBA(f32), texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 });
 
         //
         // Generate Glyph atlas + write to texture
         //
 
         const char_to_render: u8 = 'J';
-
         const file_handle = try std.fs.cwd().openFile(asset_path_font, .{ .mode = .read_only });
         defer file_handle.close();
 
@@ -641,7 +640,8 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         var font = try fontana.otf.parseFromBytes(ttf_buffer);
         const scale = fontana.otf.scaleForPixelHeight(font, 96);
         const bitmap = try fontana.otf.rasterizeGlyph(allocator, font, scale, char_to_render);
-        defer allocator.free(bitmap.pixels);
+        const pixel_count = bitmap.width * bitmap.height;
+        defer allocator.free(bitmap.pixels[0..pixel_count]);
 
         var y: u32 = 0;
         while (y < bitmap.height) : (y += 1) {
