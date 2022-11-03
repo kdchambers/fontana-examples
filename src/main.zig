@@ -625,8 +625,6 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         //
         // Generate Glyph atlas + write to texture
         //
-
-        const char_to_render: u8 = 'J';
         const file_handle = try std.fs.cwd().openFile(asset_path_font, .{ .mode = .read_only });
         defer file_handle.close();
 
@@ -638,18 +636,14 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         _ = try file_handle.readAll(ttf_buffer);
 
         var font = try fontana.otf.parseFromBytes(ttf_buffer);
-        const scale = fontana.otf.scaleForPixelHeight(font, 96);
-        const bitmap = try fontana.otf.rasterizeGlyph(allocator, font, scale, char_to_render);
-        const pixel_count = bitmap.width * bitmap.height;
-        defer allocator.free(bitmap.pixels[0..pixel_count]);
+        var font_atlas: fontana.Atlas(.{
+            .pixel_format = .rgba_f32,
+            .encoding = .ascii,
+        }) = undefined;
 
-        var y: u32 = 0;
-        while (y < bitmap.height) : (y += 1) {
-            var x: u32 = 0;
-            while (x < bitmap.width) : (x += 1) {
-                texture_memory_map[x + (y * texture_layer_dimensions.width)] = bitmap.pixels[x + (y * bitmap.width)];
-            }
-        }
+        const codepoints = "JLHY";
+        try font_atlas.init(allocator, font, codepoints, 66, texture_memory_map, .{ .width = texture_layer_dimensions.width, .height = texture_layer_dimensions.height });
+        defer font_atlas.deinit(allocator);
     }
 
     const barrier = [_]vk.ImageMemoryBarrier{
