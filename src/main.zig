@@ -148,8 +148,8 @@ fn draw() !void {
     const extent = geometry.Extent2D(f32){
         .x = 0,
         .y = 0,
-        .width = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.width)),
-        .height = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.height)),
+        .width = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.width)) * 2.0,
+        .height = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.height)) * 2.0,
     };
     const full_texture_extent = geometry.Extent2D(TextureNormalizedBaseType){
         .x = 0.0,
@@ -641,7 +641,8 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
             .encoding = .ascii,
         }) = undefined;
 
-        const codepoints = "JLHY";
+        // TODO: Assert triggered with 'z'
+        const codepoints = "abcdefghijklmnopqrstuvwxyABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
         try font_atlas.init(allocator, font, codepoints, 66, texture_memory_map, .{ .width = texture_layer_dimensions.width, .height = texture_layer_dimensions.height });
         defer font_atlas.deinit(allocator);
     }
