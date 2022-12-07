@@ -566,7 +566,7 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
             },
             .mip_levels = 1,
             .array_layers = 1,
-            .initial_layout = .@"undefined",
+            .initial_layout = .undefined,
             .usage = .{ .transfer_dst_bit = true, .sampled_bit = true },
             .samples = .{ .@"1_bit" = true },
             .sharing_mode = .exclusive,
@@ -620,7 +620,7 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         texture_memory_map[last_index].b = 1.0;
         texture_memory_map[last_index].a = 1.0;
 
-        std.mem.set(fontana.graphics.RGBA(f32), texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 });
+        std.mem.set(fontana.graphics.RGBA(f32), texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
 
         //
         // Generate Glyph atlas + write to texture
@@ -641,9 +641,11 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
             .encoding = .ascii,
         }) = undefined;
 
-        // TODO: Assert triggered with 'z'
-        const codepoints = "abcdefghijklmnopqrstuvwxyABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
-        try font_atlas.init(allocator, font, codepoints, 66, texture_memory_map, .{ .width = texture_layer_dimensions.width, .height = texture_layer_dimensions.height });
+        const codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+        try font_atlas.init(allocator, font, codepoints, 60, texture_memory_map, .{
+            .width = texture_layer_dimensions.width,
+            .height = texture_layer_dimensions.height,
+        });
         defer font_atlas.deinit(allocator);
     }
 
@@ -651,7 +653,7 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         .{
             .src_access_mask = .{},
             .dst_access_mask = .{ .shader_read_bit = true },
-            .old_layout = .@"undefined",
+            .old_layout = .undefined,
             .new_layout = .shader_read_only_optimal,
             .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
             .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
@@ -1191,7 +1193,7 @@ fn createRenderPass(app: GraphicsContext) !vk.RenderPass {
                 .store_op = .store,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
-                .initial_layout = .@"undefined",
+                .initial_layout = .undefined,
                 .final_layout = .present_src_khr,
                 .flags = .{},
             },
@@ -1236,11 +1238,11 @@ fn createDescriptorPool(app: GraphicsContext) !vk.DescriptorPool {
     const image_count: u32 = @intCast(u32, app.swapchain_image_views.len);
     const descriptor_pool_sizes = [_]vk.DescriptorPoolSize{
         .{
-            .@"type" = .sampler,
+            .type = .sampler,
             .descriptor_count = image_count,
         },
         .{
-            .@"type" = .sampled_image,
+            .type = .sampled_image,
             .descriptor_count = image_count,
         },
     };
