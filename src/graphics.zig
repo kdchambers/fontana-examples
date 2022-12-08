@@ -2,7 +2,7 @@
 // Copyright (c) 2022 Keith Chambers
 
 const std = @import("std");
-const geometry = @import("geometry.zig");
+const geometry = @import("fontana").geometry;
 
 fn TypeOfField(comptime t: anytype, comptime field_name: []const u8) type {
     for (@typeInfo(t).Struct.fields) |field| {

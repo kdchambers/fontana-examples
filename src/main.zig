@@ -8,11 +8,8 @@ const vk = @import("vulkan");
 const vulkan_config = @import("vulkan_config.zig");
 
 const fontana = @import("fontana");
-// const graphics = fontana.graphics;
-// const geometry = geometry.geometry;
-
 const graphics = @import("graphics.zig");
-const geometry = @import("geometry.zig");
+const geometry = fontana.geometry;
 
 const shaders = @import("shaders");
 
@@ -34,7 +31,7 @@ const vulkan_api_version = vk.API_VERSION_1_1;
 // NOTE: The max texture size that is guaranteed is 4096 * 4096
 //       Support for larger textures will need to be queried
 // https://github.com/gpuweb/gpuweb/issues/1327
-const texture_layer_dimensions = Dimensions2D(TexturePixelBaseType){
+const texture_layer_dimensions = geometry.Dimensions2D(TexturePixelBaseType){
     .width = 512,
     .height = 512,
 };
@@ -42,7 +39,7 @@ const texture_layer_dimensions = Dimensions2D(TexturePixelBaseType){
 /// Screen dimensions of the application, as reported by wayland
 /// Initial values are arbirary and will be updated once the wayland
 /// server reports a change
-var screen_dimensions = Dimensions2D(ScreenPixelBaseType){
+var screen_dimensions = geometry.Dimensions2D(ScreenPixelBaseType){
     .width = 640,
     .height = 1040,
 };
@@ -94,12 +91,21 @@ const ScreenNormalizedBaseType = f32;
 const TexturePixelBaseType = u16;
 const TextureNormalizedBaseType = f32;
 
-pub fn Dimensions2D(comptime BaseType: type) type {
-    return extern struct {
-        height: BaseType,
-        width: BaseType,
-    };
-}
+const TextWriterInterface = struct {
+    quad_writer: *QuadFaceWriter(graphics.GenericVertex),
+    pub fn write(
+        self: *@This(),
+        screen_extent: geometry.Extent2D(f32),
+        texture_extent: geometry.Extent2D(f32),
+    ) !void {
+        (try self.quad_writer.create()).* = graphics.generateTexturedQuad(
+            graphics.GenericVertex,
+            screen_extent,
+            texture_extent,
+            .bottom_left,
+        );
+    }
+};
 
 const GraphicsContext = struct {
     base_dispatch: vulkan_config.BaseDispatch,
@@ -143,21 +149,32 @@ var quad_face_writer_pool: QuadFaceWriterPool(graphics.GenericVertex) = undefine
 var quad_count: u32 = 0;
 var draw_requested: bool = true;
 
+var font_atlas: fontana.Atlas(.{
+    .pixel_format = .rgba_f32,
+    .encoding = .ascii,
+}) = undefined;
+
+fn scaleForScreenDimensions(dimensions: geometry.Dimensions2D(ScreenPixelBaseType)) geometry.Scale2D(f32) {
+    return .{
+        .vertical = 2.0 / @intToFloat(f32, dimensions.height),
+        .horizontal = 2.0 / @intToFloat(f32, dimensions.width),
+    };
+}
+
 fn draw() !void {
     var face_writer = quad_face_writer_pool.create(0, vertices_range_size / @sizeOf(graphics.GenericVertex));
-    const extent = geometry.Extent2D(f32){
-        .x = 0,
-        .y = 0,
-        .width = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.width)) * 2.0,
-        .height = (@intToFloat(f32, texture_layer_dimensions.width) / @intToFloat(f32, screen_dimensions.height)) * 2.0,
+    var text_writer_interface = TextWriterInterface{
+        .quad_writer = &face_writer,
     };
-    const full_texture_extent = geometry.Extent2D(TextureNormalizedBaseType){
-        .x = 0.0,
-        .y = 0.0,
-        .width = 1.0,
-        .height = 1.0,
-    };
-    (try face_writer.create()).* = graphics.generateTexturedQuad(graphics.GenericVertex, extent, full_texture_extent, .top_left);
+
+    const scale_factor = scaleForScreenDimensions(screen_dimensions);
+    try font_atlas.drawText(
+        &text_writer_interface,
+        "Hello!",
+        .{ .x = 0.0, .y = 0.0 },
+        scale_factor,
+    );
+
     quad_count = face_writer.used;
 }
 
@@ -196,6 +213,8 @@ fn onFramebufferResized(window: glfw.Window, width: u32, height: u32) void {
 }
 
 fn cleanup(allocator: std.mem.Allocator, app: *GraphicsContext) void {
+    font_atlas.deinit(allocator);
+
     cleanupSwapchain(allocator, app);
 
     allocator.free(app.images_available);
@@ -636,17 +655,12 @@ fn setup(allocator: std.mem.Allocator, app: *GraphicsContext) !void {
         _ = try file_handle.readAll(ttf_buffer);
 
         var font = try fontana.otf.parseFromBytes(ttf_buffer);
-        var font_atlas: fontana.Atlas(.{
-            .pixel_format = .rgba_f32,
-            .encoding = .ascii,
-        }) = undefined;
 
         const codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
         try font_atlas.init(allocator, font, codepoints, 60, texture_memory_map, .{
             .width = texture_layer_dimensions.width,
             .height = texture_layer_dimensions.height,
         });
-        defer font_atlas.deinit(allocator);
     }
 
     const barrier = [_]vk.ImageMemoryBarrier{
