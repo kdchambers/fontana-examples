@@ -37,22 +37,11 @@ pub fn main() !void {
 
     try app.init(allocator, application_name);
 
-    std.log.info("Init complete", .{});
-
     //
     // Generate Glyph atlas + write to texture
     //
-    const file_handle = try std.fs.cwd().openFile(asset_path_font, .{ .mode = .read_only });
-    defer file_handle.close();
-
-    const file_size = (try file_handle.stat()).size;
-
-    var ttf_buffer = try allocator.alloc(u8, file_size);
-    defer allocator.free(ttf_buffer);
-
-    _ = try file_handle.readAll(ttf_buffer);
-
-    var font = try fontana.otf.parseFromBytes(ttf_buffer);
+    var font = try fontana.otf.loadFromFile(allocator, asset_path_font);
+    defer font.deinit(allocator);
 
     const app_texture = app.getTextureMut();
 
