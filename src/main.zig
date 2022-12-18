@@ -30,6 +30,9 @@ const TextWriterInterface = struct {
     }
 };
 
+var text_writer_interface: TextWriterInterface = undefined;
+var font_atlas: Atlas = undefined;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -46,27 +49,27 @@ pub fn main() !void {
     const app_texture = app.getTextureMut();
 
     const codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
-    var font_atlas: Atlas = undefined;
     try font_atlas.init(allocator, &font, codepoints, 20, @ptrCast([*]fontana.graphics.RGBA(f32), app_texture.pixels), .{
         .width = app_texture.dimensions.width,
         .height = app_texture.dimensions.height,
     });
     defer font_atlas.deinit(allocator);
 
-    var text_writer_interface = TextWriterInterface{
+    text_writer_interface = TextWriterInterface{
         .quad_writer = app.faceWriter(),
     };
 
-    const scale_factor = app.scaleFactor();
-    try font_atlas.drawText(
-        &text_writer_interface,
-        "Hello!",
-        .{ .x = 0.0, .y = 0.0 },
-        .{
-            .horizontal = scale_factor.horizontal,
-            .vertical = scale_factor.vertical,
-        },
-    );
+    app.onResize = onResize;
 
     try app.doLoop();
+}
+
+fn onResize(width: f32, height: f32) void {
+    const scale_factor = fontana.geometry.Scale2D(f32){
+        .vertical = 2.0 / height,
+        .horizontal = 2.0 / width,
+    };
+    font_atlas.drawText(&text_writer_interface, "Hello!", .{ .x = 0.0, .y = 0.0 }, scale_factor) catch |err| {
+        std.log.warn("Failed to draw text. Error: {}", .{err});
+    };
 }

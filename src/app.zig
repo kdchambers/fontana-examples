@@ -222,6 +222,11 @@ var quad_face_writer = QuadFaceWriter(graphics.GenericVertex){};
 var quad_count: u32 = 0;
 var draw_requested: bool = true;
 var framebuffer_resized: bool = true;
+pub var onResize: *const fn(f32, f32) void = defaultOnResize;
+
+fn defaultOnResize(_: f32, _: f32) void {
+    //
+}
 
 pub fn doLoop() !void {
     window.setFramebufferSizeCallback(onFramebufferResized);
@@ -975,6 +980,7 @@ fn onFramebufferResized(_: glfw.Window, width: u32, height: u32) void {
     screen_dimensions.width = @intCast(u16, width);
     screen_dimensions.height = @intCast(u16, height);
     framebuffer_resized = true;
+    onResize(@intToFloat(f32, width), @intToFloat(f32, height));
     draw_requested = true;
 }
 
