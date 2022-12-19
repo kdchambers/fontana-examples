@@ -5,6 +5,7 @@ const std = @import("std");
 
 const glfw = @import("libs/mach-glfw/build.zig");
 const vkgen = @import("libs/vulkan-zig/generator/index.zig");
+const freetype = @import("libs/mach-freetype/build.zig");
 
 const Builder = std.build.Builder;
 const Build = std.build;
@@ -34,6 +35,9 @@ pub fn build(b: *Builder) !void {
 
     exe.addPackage(glfw.pkg);
     try glfw.link(b, exe, .{});
+
+    exe.addPackage(freetype.pkg);
+    freetype.link(b, exe, .{});
 
     exe.linkLibC();
     exe.install();
