@@ -12,10 +12,8 @@ const geometry = fontana.geometry;
 const application_name = "fontana tester";
 const asset_path_font = "assets/Roboto-Medium.ttf";
 
-const Atlas = fontana.Atlas(.{
-    .pixel_format = .rgba_f32,
-    .encoding = .ascii,
-});
+const Atlas = fontana.Atlas;
+const PixelType = fontana.graphics.RGBA(f32);
 
 const TextWriterInterface = struct {
     quad_writer: *app.QuadFaceWriter(graphics.GenericVertex),
@@ -33,71 +31,73 @@ const TextWriterInterface = struct {
     }
 };
 
+fn FontInterface(comptime capacity: usize) type {
+    const GlyphInfo = struct {
+        bounding_box: geometry.BoundingBox(i32),
+        advance_x: u16,
+        leftside_bearing: i16,
+        decent: i16,
+    };
+
+    return struct {
+        font: *otf.FontInfo,
+        atlas: *Atlas,
+        codepoints: []const u8,
+        atlas_entries: [capacity]geometry.Extent2D(u32),
+
+        pub inline fn textureExtentFromIndex(self: *@This(), codepoint: u8) geometry.Extent2D(u32) {
+            const atlas_index = blk: {
+                var i: usize = 0;
+                while (i < capacity) : (i += 1) {
+                    const current_codepoint = self.codepoints[i];
+                    if (current_codepoint == codepoint) break :blk i;
+                }
+                unreachable;
+            };
+            return self.atlas_entries[atlas_index];
+        }
+
+        pub inline fn textureDimensions(self: *@This()) geometry.Dimensions2D(u32) {
+            const size = self.atlas.size;
+            return .{
+                .width = size,
+                .height = size,
+            };
+        }
+
+        pub inline fn glyphIndexFromCodepoint(self: *@This(), codepoint: u8) ?u32 {
+            return otf.findGlyphIndex(self.font, codepoint);
+        }
+
+        pub inline fn glyphInfoFromIndex(self: *@This(), glyph_index: u32) GlyphInfo {
+            var glyph_info: GlyphInfo = undefined;
+            glyph_info.bounding_box = otf.calculateGlyphBoundingBox(self.font, glyph_index) catch unreachable;
+            glyph_info.leftside_bearing = otf.leftBearingForGlyph(self.font, glyph_index);
+            glyph_info.advance_x = otf.advanceXForGlyph(self.font, glyph_index);
+            glyph_info.decent = -@intCast(i16, glyph_info.bounding_box.y0);
+            return glyph_info;
+        }
+
+        pub inline fn scaleForPointSize(self: *@This(), target_point_size: f64) f64 {
+            const units_per_em = self.font.units_per_em;
+            const ppi = 100;
+            return otf.fUnitToPixelScale(target_point_size, ppi, units_per_em);
+        }
+
+        pub inline fn kernPairAdvance(self: *@This()) ?i16 {
+            // TODO: Implement
+            _ = self;
+            return null;
+        }
+    };
+}
+
+const atlas_codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!";
+const render_text = "Hello World!";
+const point_size: f64 = 18.0; // 24 pixels
+
+var font_interface: FontInterface(atlas_codepoints.len) = undefined;
 var text_writer_interface: TextWriterInterface = undefined;
-var font_atlas: Atlas = undefined;
-const FontAdapter = Atlas.FontAdapter;
-
-const fontana_font_adapter = struct {
-    const CodepointType = Atlas.CodepointType;
-    const PixelType = Atlas.PixelType;
-
-    pub fn scaleForPixelHeight(self: *const FontAdapter, height_pixels: f32) f32 {
-        const font = @ptrCast(*otf.FontInfo, self.internal);
-        return otf.scaleForPixelHeight(font, height_pixels);
-    }
-
-    pub fn advanceHorizontalList(self: *const FontAdapter, codepoints: []const CodepointType, out_advance_list: []u16) void {
-        const font = @ptrCast(*otf.FontInfo, self.internal);
-        otf.loadXAdvances(font, codepoints, out_advance_list);
-    }
-
-    pub fn kernPairList(
-        self: *const FontAdapter,
-        allocator: std.mem.Allocator,
-        codepoints: []const CodepointType,
-    ) error{ InvalidFont, InvalidCodepoint, OutOfMemory }![]otf.KernPair {
-        const font = @ptrCast(*const otf.FontInfo, self.internal);
-        return otf.generateKernPairsFromGpos(allocator, font, codepoints) catch |err| {
-            return switch (err) {
-                error.OutOfMemory => error.OutOfMemory,
-                else => error.InvalidFont,
-            };
-        };
-    }
-
-    pub fn glyphBoundingBox(
-        self: *const FontAdapter,
-        codepoint: CodepointType,
-    ) error{Unknown}!geometry.BoundingBox(i32) {
-        const font = @ptrCast(*const otf.FontInfo, self.internal);
-        return otf.boundingBoxForCodepoint(font, @intCast(i32, codepoint)) catch {
-            return error.Unknown;
-        };
-    }
-
-    pub fn rasterizeGlyph(
-        self: *const FontAdapter,
-        allocator: std.mem.Allocator,
-        codepoint: CodepointType,
-        scale: f32,
-        texture_pixels: [*]PixelType,
-        texture_dimensions: geometry.Dimensions2D(u32),
-        extent: geometry.Extent2D(u32),
-    ) error{ Unknown, OutOfMemory, InvalidInput }!void {
-        const font = @ptrCast(*const otf.FontInfo, self.internal);
-        var pixel_writer = fontana.rasterizer.SubTexturePixelWriter(PixelType){
-            .texture_width = texture_dimensions.width,
-            .write_extent = extent,
-            .pixels = texture_pixels,
-        };
-        _ = otf.rasterizeGlyph(allocator, pixel_writer, font, scale, codepoint) catch |err| {
-            return switch (err) {
-                error.OutOfMemory => error.OutOfMemory,
-                else => error.Unknown,
-            };
-        };
-    }
-};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -106,9 +106,6 @@ pub fn main() !void {
 
     try app.init(allocator, application_name);
 
-    //
-    // Generate Glyph atlas + write to texture
-    //
     var font = try fontana.otf.loadFromFile(allocator, asset_path_font);
     defer font.deinit(allocator);
 
@@ -117,33 +114,51 @@ pub fn main() !void {
     const pixel_count = @intCast(usize, app_texture.dimensions.width) * app_texture.dimensions.height;
     std.mem.set(graphics.RGBA(f32), app_texture.pixels[0..pixel_count], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
 
-    const fontana_adapter = Atlas.FontAdapter{
-        .internal = @ptrCast(*FontAdapter.Internal, &font),
-        .scaleForPixelHeight = fontana_font_adapter.scaleForPixelHeight,
-        .advanceHorizontalList = fontana_font_adapter.advanceHorizontalList,
-        .kernPairList = fontana_font_adapter.kernPairList,
-        .glyphBoundingBox = fontana_font_adapter.glyphBoundingBox,
-        .rasterizeGlyph = fontana_font_adapter.rasterizeGlyph,
+    var atlas = try fontana.Atlas.init(allocator, app_texture.dimensions.width);
+    defer atlas.deinit(allocator);
+
+    font_interface = .{
+        .font = &font,
+        .atlas = &atlas,
+        .codepoints = atlas_codepoints,
+        .atlas_entries = undefined,
     };
 
-    const codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
-    try font_atlas.init(
-        allocator,
-        &fontana_adapter,
-        codepoints,
-        20,
-        font.space_advance,
-        @ptrCast([*]fontana.graphics.RGBA(f32), app_texture.pixels),
-        .{
-            .width = app_texture.dimensions.width,
-            .height = app_texture.dimensions.height,
-        },
-    );
-    defer font_atlas.deinit(allocator);
+    const ppi = 100;
+    const funit_to_pixel = otf.fUnitToPixelScale(point_size, ppi, font.units_per_em);
+    for (atlas_codepoints) |codepoint, codepoint_i| {
+        const required_dimensions = try otf.getRequiredDimensions(&font, codepoint, funit_to_pixel);
+        font_interface.atlas_entries[codepoint_i] = try atlas.reserve(
+            allocator,
+            required_dimensions.width,
+            required_dimensions.height,
+        );
+        var pixel_writer = fontana.rasterizer.SubTexturePixelWriter(PixelType){
+            .texture_width = app_texture.dimensions.width,
+            .pixels = @ptrCast([*]fontana.graphics.RGBA(f32), app_texture.pixels),
+            .write_extent = font_interface.atlas_entries[codepoint_i],
+        };
+        otf.rasterizeGlyph(allocator, pixel_writer, &font, @floatCast(f32, funit_to_pixel), codepoint) catch |err| {
+            return switch (err) {
+                error.OutOfMemory => error.OutOfMemory,
+                else => error.Unknown,
+            };
+        };
+    }
 
-    text_writer_interface = TextWriterInterface{
+    text_writer_interface = .{
         .quad_writer = app.faceWriter(),
     };
+
+    const scale_factor = app.scaleFactor();
+    try fontana.drawText(
+        render_text,
+        .{ .x = 0.0, .y = 0.0 },
+        .{ .horizontal = scale_factor.horizontal, .vertical = scale_factor.vertical },
+        point_size,
+        &text_writer_interface,
+        &font_interface,
+    );
 
     app.onResize = onResize;
 
@@ -151,11 +166,16 @@ pub fn main() !void {
 }
 
 fn onResize(width: f32, height: f32) void {
-    const scale_factor = fontana.geometry.Scale2D(f32){
-        .vertical = 2.0 / height,
-        .horizontal = 2.0 / width,
-    };
-    font_atlas.drawText(&text_writer_interface, "Hello", .{ .x = 0.0, .y = 0.0 }, scale_factor) catch |err| {
-        std.log.warn("Failed to draw text. Error: {}", .{err});
+    std.log.info("Resizing: {d}, {d}", .{ width, height });
+    const scale_factor = app.scaleFactor();
+    fontana.drawText(
+        render_text,
+        .{ .x = 0.0, .y = 0.1 },
+        .{ .horizontal = scale_factor.horizontal, .vertical = scale_factor.vertical },
+        point_size,
+        &text_writer_interface,
+        &font_interface,
+    ) catch |err| {
+        std.log.err("Failed to draw text. Error: {}", .{err});
     };
 }

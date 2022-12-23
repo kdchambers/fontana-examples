@@ -222,7 +222,7 @@ var quad_face_writer = QuadFaceWriter(graphics.GenericVertex){};
 var quad_count: u32 = 0;
 var draw_requested: bool = true;
 var framebuffer_resized: bool = true;
-pub var onResize: *const fn(f32, f32) void = defaultOnResize;
+pub var onResize: *const fn (f32, f32) void = defaultOnResize;
 
 fn defaultOnResize(_: f32, _: f32) void {
     //
@@ -252,7 +252,7 @@ pub fn faceWriter() *QuadFaceWriter(graphics.GenericVertex) {
     return &quad_face_writer;
 }
 
-pub fn scaleFactor() Scale2D(f32) {
+pub fn scaleFactor() Scale2D(f64) {
     return scaleForScreenDimensions(screen_dimensions);
 }
 
@@ -969,10 +969,10 @@ fn draw() !void {
     quad_count = quad_face_writer.used;
 }
 
-fn scaleForScreenDimensions(dimensions: Dimensions2D(ScreenPixelBaseType)) Scale2D(f32) {
+fn scaleForScreenDimensions(dimensions: Dimensions2D(ScreenPixelBaseType)) Scale2D(f64) {
     return .{
-        .vertical = 2.0 / @intToFloat(f32, dimensions.height),
-        .horizontal = 2.0 / @intToFloat(f32, dimensions.width),
+        .vertical = 2.0 / @intToFloat(f64, dimensions.height),
+        .horizontal = 2.0 / @intToFloat(f64, dimensions.width),
     };
 }
 
@@ -980,6 +980,7 @@ fn onFramebufferResized(_: glfw.Window, width: u32, height: u32) void {
     screen_dimensions.width = @intCast(u16, width);
     screen_dimensions.height = @intCast(u16, height);
     framebuffer_resized = true;
+    quad_face_writer.used = 0;
     onResize(@intToFloat(f32, width), @intToFloat(f32, height));
     draw_requested = true;
 }
