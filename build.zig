@@ -37,7 +37,8 @@ pub fn build(b: *Builder) !void {
     try glfw.link(b, exe, .{});
 
     exe.addPackage(freetype.pkg);
-    freetype.link(b, exe, .{});
+    exe.addPackage(freetype.harfbuzz_pkg);
+    freetype.link(b, exe, .{ .harfbuzz = .{ .install_libs = false } });
 
     exe.linkLibC();
     exe.install();
