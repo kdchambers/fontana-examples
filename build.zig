@@ -27,7 +27,7 @@ pub fn build(b: *Builder) !void {
 
     exe.addPackage(.{
         .name = "fontana",
-        .source = .{ .path = "libs/fontana/fontana.zig" },
+        .source = .{ .path = "libs/fontana/src/fontana.zig" },
     });
 
     const gen = vkgen.VkGenerateStep.init(b, "vk.xml", "vk.zig");
