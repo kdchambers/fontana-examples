@@ -6,9 +6,9 @@ const fontana = @import("fontana");
 const app = @import("app.zig");
 const graphics = @import("graphics.zig");
 const geometry = fontana.geometry;
-
-const application_name = "fontana tester";
-const asset_path_font = "assets/Roboto-Medium.ttf";
+const builtin = @import("builtin");
+const build_mode = builtin.mode;
+const is_debug = (build_mode == .Debug);
 
 const TextWriterInterface = struct {
     quad_writer: *app.QuadFaceWriter(graphics.GenericVertex),
@@ -26,41 +26,54 @@ const TextWriterInterface = struct {
     }
 };
 
+const application_name = "fontana tester";
+const asset_path_font = "assets/Roboto-Medium.ttf";
 const atlas_codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!";
 const render_text = "Seasons Greetings!";
 const point_size: f64 = 18.0; // 24 pixels
+const font_backend: fontana.Backend = .fontana;
+const Font = fontana.Font(font_backend);
 
 var text_writer_interface: TextWriterInterface = undefined;
-
-const Font = fontana.Font(.fontana);
-const Pen = Font.Pen;
-
-var pen: Pen = undefined;
+var pen: Font.Pen = undefined;
+var gpa = if (is_debug) std.heap.GeneralPurposeAllocator(.{}){} else {};
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var allocator = gpa.allocator();
+    var allocator = if (is_debug) gpa.allocator() else std.heap.c_allocator;
+    defer {
+        if (is_debug)
+            _ = gpa.deinit();
+    }
 
     try app.init(allocator, application_name);
+    const texture = app.getTextureMut();
 
-    const app_texture = app.getTextureMut();
-
-    const pixel_count = @intCast(usize, app_texture.dimensions.width) * app_texture.dimensions.height;
-    std.mem.set(graphics.RGBA(f32), app_texture.pixels[0..pixel_count], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
-
+    const font_setup_start = std.time.nanoTimestamp();
     var font = try Font.loadFromFile(allocator, asset_path_font);
     defer font.deinit(allocator);
 
-    pen = try font.createPen(
-        graphics.RGBA(f32),
-        allocator,
-        .{ .point = point_size },
-        100,
-        atlas_codepoints,
-        app_texture.dimensions.width,
-        app_texture.pixels,
-    );
+    {
+        const PixelType = graphics.RGBA(f32);
+        const points_per_pixel = 100;
+        const font_size = fontana.Size{ .point = point_size };
+        pen = try font.createPen(
+            PixelType,
+            allocator,
+            font_size,
+            points_per_pixel,
+            atlas_codepoints,
+            texture.dimensions.width,
+            texture.pixels,
+        );
+    }
+    defer pen.deinit(allocator);
+    const font_setup_end = std.time.nanoTimestamp();
+    const font_setup_duration = @intCast(u64, font_setup_end - font_setup_start);
+    std.log.info("Font setup in {} for backend `{s}` in mode `{s}`", .{
+        std.fmt.fmtDuration(font_setup_duration),
+        @tagName(font_backend),
+        @tagName(build_mode),
+    });
 
     text_writer_interface = .{
         .quad_writer = app.faceWriter(),
