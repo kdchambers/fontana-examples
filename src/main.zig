@@ -27,9 +27,9 @@ const TextWriterInterface = struct {
 };
 
 const application_name = "fontana tester";
-const asset_path_font = "assets/Roboto-Medium.ttf";
-const atlas_codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!";
-const render_text = "Seasons Greetings!";
+const asset_path_font = "assets/Roboto-Light.ttf";
+const atlas_codepoints = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!.";
+const render_text = "Hello World!";
 const point_size: f64 = 18.0; // 24 pixels
 const font_backend: fontana.Backend = .fontana;
 const Font = fontana.Font(font_backend);
@@ -41,7 +41,7 @@ var gpa = if (is_debug) std.heap.GeneralPurposeAllocator(.{}){} else {};
 pub fn main() !void {
     var allocator = if (is_debug) gpa.allocator() else std.heap.c_allocator;
     defer {
-        if (is_debug)
+        if (comptime is_debug)
             _ = gpa.deinit();
     }
 
@@ -49,7 +49,7 @@ pub fn main() !void {
     const texture = app.getTextureMut();
 
     const font_setup_start = std.time.nanoTimestamp();
-    var font = try Font.loadFromFile(allocator, asset_path_font);
+    var font = try Font.initFromFile(allocator, asset_path_font);
     defer font.deinit(allocator);
 
     {
@@ -67,6 +67,7 @@ pub fn main() !void {
         );
     }
     defer pen.deinit(allocator);
+
     const font_setup_end = std.time.nanoTimestamp();
     const font_setup_duration = @intCast(u64, font_setup_end - font_setup_start);
     std.log.info("Font setup in {} for backend `{s}` in mode `{s}`", .{
@@ -75,9 +76,7 @@ pub fn main() !void {
         @tagName(build_mode),
     });
 
-    text_writer_interface = .{
-        .quad_writer = app.faceWriter(),
-    };
+    text_writer_interface = .{ .quad_writer = app.faceWriter() };
     app.onResize = onResize;
 
     try app.doLoop();

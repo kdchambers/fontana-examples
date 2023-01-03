@@ -30,15 +30,20 @@ pub fn build(b: *Builder) !void {
         .source = .{ .path = "libs/fontana/src/fontana.zig" },
     });
 
-    const gen = vkgen.VkGenerateStep.init(b, "vk.xml", "vk.zig");
-    exe.addPackage(gen.package);
+    const gen = vkgen.VkGenerateStep.create(b, "vk.xml", "vk.zig");
+    const vulkan_pkg = gen.getPackage("vulkan");
 
-    exe.addPackage(glfw.pkg);
-    try glfw.link(b, exe, .{});
+    const glfw_pkg = glfw.pkg(b);
+    const freetype_pkg = freetype.pkg(b);
+    const harfbuzz_pkg = freetype.harfbuzz_pkg(b);
 
-    exe.addPackage(freetype.pkg);
-    exe.addPackage(freetype.harfbuzz_pkg);
+    exe.addPackage(vulkan_pkg);
+    exe.addPackage(glfw_pkg);
+    exe.addPackage(freetype_pkg);
+    exe.addPackage(harfbuzz_pkg);
+
     freetype.link(b, exe, .{ .harfbuzz = .{ .install_libs = false } });
+    try glfw.link(b, exe, .{});
 
     exe.linkLibC();
     exe.install();
