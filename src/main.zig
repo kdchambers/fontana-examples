@@ -33,6 +33,7 @@ const render_text = "Hello World!";
 const point_size: f64 = 18.0; // 24 pixels
 const font_backend: fontana.Backend = .fontana;
 const Font = fontana.Font(font_backend);
+const Atlas = fontana.Atlas;
 
 var text_writer_interface: TextWriterInterface = undefined;
 var pen: Font.Pen = undefined;
@@ -52,6 +53,9 @@ pub fn main() !void {
     var font = try Font.initFromFile(allocator, asset_path_font);
     defer font.deinit(allocator);
 
+    var atlas = try Atlas.init(allocator, texture.dimensions.width);
+    defer atlas.deinit(allocator);
+
     {
         const PixelType = graphics.RGBA(f32);
         const points_per_pixel = 100;
@@ -64,6 +68,7 @@ pub fn main() !void {
             atlas_codepoints,
             texture.dimensions.width,
             texture.pixels,
+            &atlas,
         );
     }
     defer pen.deinit(allocator);
