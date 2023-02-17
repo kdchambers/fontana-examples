@@ -5,7 +5,6 @@ const std = @import("std");
 
 const glfw = @import("libs/mach-glfw/build.zig");
 const vkgen = @import("libs/vulkan-zig/generator/index.zig");
-const freetype = @import("libs/mach-freetype/build.zig");
 
 const Builder = std.build.Builder;
 const Build = std.build;
@@ -13,36 +12,33 @@ const Pkg = Build.Pkg;
 
 pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
-    const mode = b.standardReleaseOptions();
+    const optimize_mode = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable("fontana-example", "src/main.zig");
-
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
-
-    exe.addPackage(.{
-        .name = "shaders",
-        .source = .{ .path = "shaders/shaders.zig" },
+    const exe = b.addExecutable(.{
+        .name = "fontana-examples",
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = target,
+        .optimize = optimize_mode,
     });
 
-    exe.addPackage(.{
-        .name = "fontana",
-        .source = .{ .path = "libs/fontana/src/fontana.zig" },
+    const module_shaders = b.createModule(.{
+        .source_file = .{ .path = "shaders/shaders.zig" },
+        .dependencies = &.{},
     });
+
+    const module_fontana = b.createModule(.{
+        .source_file = .{ .path = "libs/fontana/src/fontana.zig" },
+        .dependencies = &.{},
+    });
+    exe.addModule("shaders", module_shaders);
+    exe.addModule("fontana", module_fontana);
 
     const gen = vkgen.VkGenerateStep.create(b, "vk.xml", "vk.zig");
-    const vulkan_pkg = gen.getPackage("vulkan");
+    exe.addModule("vulkan", gen.getModule());
 
-    const glfw_pkg = glfw.pkg(b);
-    const freetype_pkg = freetype.pkg(b);
-    const harfbuzz_pkg = freetype.harfbuzz_pkg(b);
+    const glfw_module = glfw.module(b);
+    exe.addModule("glfw", glfw_module);
 
-    exe.addPackage(vulkan_pkg);
-    exe.addPackage(glfw_pkg);
-    exe.addPackage(freetype_pkg);
-    exe.addPackage(harfbuzz_pkg);
-
-    freetype.link(b, exe, .{ .harfbuzz = .{ .install_libs = false } });
     try glfw.link(b, exe, .{});
 
     exe.linkLibC();

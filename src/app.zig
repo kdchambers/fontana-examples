@@ -222,6 +222,7 @@ var quad_face_writer = QuadFaceWriter(graphics.GenericVertex){};
 var quad_count: u32 = 0;
 var draw_requested: bool = true;
 var framebuffer_resized: bool = true;
+
 pub var onResize: *const fn (f32, f32) void = defaultOnResize;
 
 fn defaultOnResize(_: f32, _: f32) void {
@@ -231,7 +232,7 @@ fn defaultOnResize(_: f32, _: f32) void {
 pub fn doLoop() !void {
     window.setFramebufferSizeCallback(onFramebufferResized);
     while (!window.shouldClose()) {
-        try glfw.pollEvents();
+        glfw.pollEvents();
         try device_dispatch.deviceWaitIdle(logical_device);
         if (draw_requested) {
             draw_requested = false;
@@ -480,15 +481,18 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         unreachable;
     };
 
-    try glfw.init(.{ .platform = glfw_platform_hint });
+    _ = glfw.init(.{ .platform = glfw_platform_hint });
 
     if (!glfw.vulkanSupported()) {
         std.log.err("GLFW reports vulkan is not supported", .{});
         return error.GlfwNoVulkanSupport;
     }
 
-    window = try glfw.Window.create(640, 480, application_title, null, null, .{ .client_api = .no_api });
-    _ = try glfw.createWindowSurface(instance, window, null, &surface);
+    window = glfw.Window.create(640, 480, application_title, null, null, .{ .client_api = .no_api }) orelse {
+        std.log.err("Failed to create GLFW window", .{});
+        return error.GLFWWindowCreateFail;
+    };
+    _ = glfw.createWindowSurface(instance, window, null, &surface);
 
     errdefer instance_dispatch.destroySurfaceKHR(instance, surface, null);
 
@@ -1210,10 +1214,7 @@ fn renderFrame() !void {
     switch (acquire_image_result.result) {
         .success => {},
         .error_out_of_date_khr, .suboptimal_khr => {
-            const size = window.getFramebufferSize() catch glfw.Window.Size{
-                .width = screen_dimensions.width,
-                .height = screen_dimensions.height,
-            };
+            const size = window.getFramebufferSize();
             screen_dimensions.width = @intCast(u16, size.width);
             screen_dimensions.height = @intCast(u16, size.height);
             try recreateSwapchain();
@@ -1269,10 +1270,7 @@ fn renderFrame() !void {
     switch (present_result) {
         .success => {},
         .error_out_of_date_khr, .suboptimal_khr => {
-            const size = window.getFramebufferSize() catch glfw.Window.Size{
-                .width = screen_dimensions.width,
-                .height = screen_dimensions.height,
-            };
+            const size = window.getFramebufferSize();
             screen_dimensions.width = @intCast(u16, size.width);
             screen_dimensions.height = @intCast(u16, size.height);
             try recreateSwapchain();

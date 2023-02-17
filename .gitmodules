@@ -7,6 +7,3 @@
 [submodule "libs/fontana"]
 	path = libs/fontana
 	url = https://github.com/kdchambers/fontana
-[submodule "libs/mach-freetype"]
-	path = libs/mach-freetype
-	url = https://github.com/hexops/mach-freetype
