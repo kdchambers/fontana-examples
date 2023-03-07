@@ -521,7 +521,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         defer allocator.free(physical_devices);
 
         std.log.info("Physical vulkan devices found: {d}", .{physical_devices.len});
-        for (physical_devices) |device, device_i| {
+        for (physical_devices, 0..) |device, device_i| {
             const device_supports_extensions = blk: {
                 var extension_count: u32 = undefined;
                 if (.success != (try instance_dispatch.enumerateDeviceExtensionProperties(device, null, &extension_count, null))) {
@@ -570,7 +570,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
             var queue_families: [max_family_queues]vk.QueueFamilyProperties = undefined;
             instance_dispatch.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, &queue_families);
 
-            for (queue_families[0..queue_family_count]) |queue_family, queue_family_i| {
+            for (queue_families[0..queue_family_count], 0..) |queue_family, queue_family_i| {
                 if (queue_family.queue_count <= 0) {
                     continue;
                 }
@@ -1117,7 +1117,7 @@ fn recordRenderPass() !void {
         },
     };
 
-    for (command_buffers) |command_buffer, i| {
+    for (command_buffers, 0..) |command_buffer, i| {
         try device_dispatch.beginCommandBuffer(command_buffer, &vk.CommandBufferBeginInfo{
             .flags = .{},
             .p_inheritance_info = null,
@@ -1291,7 +1291,7 @@ fn renderFrame() !void {
 }
 
 fn createSwapchainImageViews() !void {
-    for (swapchain_image_views) |*image_view, image_view_i| {
+    for (swapchain_image_views, 0..) |*image_view, image_view_i| {
         const image_view_create_info = vk.ImageViewCreateInfo{
             .image = swapchain_images[image_view_i],
             .view_type = .@"2d",

@@ -33,7 +33,7 @@ pub fn build(b: *Builder) !void {
     exe.addModule("shaders", module_shaders);
     exe.addModule("fontana", module_fontana);
 
-    const gen = vkgen.VkGenerateStep.create(b, "vk.xml", "vk.zig");
+    const gen = vkgen.VkGenerateStep.create(b, "vk.xml");
     exe.addModule("vulkan", gen.getModule());
 
     const glfw_module = glfw.module(b);
