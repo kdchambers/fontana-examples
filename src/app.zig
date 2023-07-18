@@ -40,8 +40,8 @@ const max_texture_quads_per_render: u32 = 1024;
 const max_frames_in_flight: u32 = 2;
 
 /// Size in bytes of each texture layer (Not including padding, etc)
-const texture_layer_size = @sizeOf(graphics.RGBA(f32)) * @intCast(u64, texture_layer_dimensions.width) * texture_layer_dimensions.height;
-const texture_pixel_count = @intCast(u32, texture_layer_dimensions.width) * texture_layer_dimensions.height;
+const texture_layer_size = @sizeOf(graphics.RGBA(f32)) * @as(u64, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height;
+const texture_pixel_count = @as(u32, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height;
 
 const indices_range_index_begin = 0;
 const indices_range_size = max_texture_quads_per_render * @sizeOf(u16) * 6; // 12 kb
@@ -69,7 +69,7 @@ pub const Texture = struct {
 
     pub fn clear(self: *Texture) void {
         const pixel_count = self.dimensions.width * self.dimensions.height;
-        std.mem.set(graphics.RGBA(f32), self.pixels[0..pixel_count], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
+        @memset(self.pixels[0..pixel_count], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
     }
 };
 
@@ -106,7 +106,7 @@ fn QuadFaceWriterPool(comptime VertexType: type) type {
 
         pub fn initialize(start: [*]align(@alignOf(VertexType)) u8, memory_quad_range: u32) @This() {
             return .{
-                .memory_ptr = @ptrCast([*]QuadFace(VertexType), start),
+                .memory_ptr = @as([*]QuadFace(VertexType), @ptrCast(start)),
                 .memory_quad_range = memory_quad_range,
             };
         }
@@ -130,7 +130,7 @@ pub fn QuadFaceWriter(comptime VertexType: type) type {
 
         pub fn initialize(base: [*]QuadFace(VertexType), quad_index: u32, quad_size: u32) @This() {
             return .{
-                .memory_ptr = @ptrCast([*]QuadFace(VertexType), &base[quad_index]),
+                .memory_ptr = @as([*]QuadFace(VertexType), @ptrCast(&base[quad_index])),
                 .quad_index = quad_index,
                 .capacity = quad_size,
                 .used = 0,
@@ -143,7 +143,7 @@ pub fn QuadFaceWriter(comptime VertexType: type) type {
 
         pub fn remaining(self: *@This()) u32 {
             std.debug.assert(self.capacity >= self.used);
-            return @intCast(u32, self.capacity - self.used);
+            return @as(u32, @intCast(self.capacity - self.used));
         }
 
         pub fn reset(self: *@This()) void {
@@ -167,8 +167,8 @@ pub fn QuadFaceWriter(comptime VertexType: type) type {
 var application_title: [:0]const u8 = undefined;
 
 var screen_dimensions: Dimensions2D(ScreenPixelBaseType) = .{
-    .width = 640,
-    .height = 1040,
+    .width = 1040,
+    .height = 640,
 };
 
 var vertex_buffer: []graphics.QuadFace(graphics.GenericVertex) = undefined;
@@ -280,7 +280,7 @@ pub fn uploadTexture() !void {
             .command_pool = update_texture_command_pool,
             .command_buffer_count = 1,
         };
-        try device_dispatch.allocateCommandBuffers(logical_device, &comment_buffer_alloc_info, @ptrCast([*]vk.CommandBuffer, &command_buffer));
+        try device_dispatch.allocateCommandBuffers(logical_device, &comment_buffer_alloc_info, @as([*]vk.CommandBuffer, @ptrCast(&command_buffer)));
     }
 
     try device_dispatch.beginCommandBuffer(command_buffer, &vk.CommandBufferBeginInfo{
@@ -321,7 +321,7 @@ pub fn uploadTexture() !void {
         .p_wait_semaphores = undefined,
         .p_wait_dst_stage_mask = undefined,
         .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast([*]vk.CommandBuffer, &command_buffer),
+        .p_command_buffers = @as([*]vk.CommandBuffer, @ptrCast(&command_buffer)),
         .signal_semaphore_count = 0,
         .p_signal_semaphores = undefined,
     }};
@@ -357,7 +357,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
     var vkGetInstanceProcAddr: *const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction = undefined;
     if (clib.dlopen(vulkan_lib_symbol, clib.RTLD_NOW)) |vulkan_loader| {
-        const vk_get_instance_proc_addr_fn_opt = @ptrCast(?*const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction, clib.dlsym(vulkan_loader, "vkGetInstanceProcAddr"));
+        const vk_get_instance_proc_addr_fn_opt = @as(?*const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction, @ptrCast(clib.dlsym(vulkan_loader, "vkGetInstanceProcAddr")));
         if (vk_get_instance_proc_addr_fn_opt) |vk_get_instance_proc_addr_fn| {
             vkGetInstanceProcAddr = vk_get_instance_proc_addr_fn;
             base_dispatch = try vulkan_config.BaseDispatch.load(vkGetInstanceProcAddr);
@@ -383,7 +383,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         std.debug.assert(result == .success);
     }
 
-    std.debug.assert(instance_extension_properties_count <= 20);
+    std.debug.assert(instance_extension_properties_count <= 40);
     {
         const result = base_dispatch.enumerateInstanceExtensionProperties(null, &instance_extension_properties_count, &instance_extension_properties) catch |err| {
             std.log.err("Failed to load vulkan instance extension properties. Error {}", .{err});
@@ -403,7 +403,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
     var surface_support = SurfaceSupport{};
 
     for (instance_extension_properties[0..instance_extension_properties_count]) |*instance_extension_property| {
-        const extension = toSlice(@ptrCast([*:0]const u8, &(instance_extension_property.extension_name)));
+        const extension = toSlice(@as([*:0]const u8, @ptrCast(&(instance_extension_property.extension_name))));
         if (std.mem.eql(u8, "VK_KHR_wayland_surface", extension)) {
             surface_support.wayland = true;
             continue;
@@ -463,8 +463,8 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
             .engine_version = vulkan_engine_version,
             .api_version = vulkan_api_version,
         },
-        .enabled_extension_count = @intCast(u32, required_instance_extensions.len),
-        .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &required_instance_extensions),
+        .enabled_extension_count = @as(u32, @intCast(required_instance_extensions.len)),
+        .pp_enabled_extension_names = @as([*]const [*:0]const u8, @ptrCast(&required_instance_extensions)),
         .enabled_layer_count = 0,
         .pp_enabled_layer_names = undefined,
         .flags = .{},
@@ -481,7 +481,10 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         unreachable;
     };
 
-    _ = glfw.init(.{ .platform = glfw_platform_hint });
+    if (!glfw.init(.{ .platform = glfw_platform_hint })) {
+        std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
+        std.process.exit(1);
+    }
 
     if (!glfw.vulkanSupported()) {
         std.log.err("GLFW reports vulkan is not supported", .{});
@@ -522,6 +525,8 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
         std.log.info("Physical vulkan devices found: {d}", .{physical_devices.len});
         for (physical_devices, 0..) |device, device_i| {
+            std.log.info("Checking device {d}", .{device_i});
+
             const device_supports_extensions = blk: {
                 var extension_count: u32 = undefined;
                 if (.success != (try instance_dispatch.enumerateDeviceExtensionProperties(device, null, &extension_count, null))) {
@@ -542,7 +547,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
                         // NOTE: We are relying on device_extensions to only contain c strings up to 255 characters
                         //       available_extension.extension_name will always be a null terminated string in a 256 char buffer
                         // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_MAX_EXTENSION_NAME_SIZE.html
-                        if (std.cstr.cmp(requested_extension, @ptrCast([*:0]const u8, &available_extension.extension_name)) == 0) {
+                        if (std.mem.orderZ(u8, requested_extension, @as([*:0]const u8, @ptrCast(&available_extension.extension_name))) == .eq) {
                             continue :dev_extensions;
                         }
                     }
@@ -577,11 +582,11 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
                 if (queue_family.queue_flags.graphics_bit) {
                     const present_support = try instance_dispatch.getPhysicalDeviceSurfaceSupportKHR(
                         device,
-                        @intCast(u32, queue_family_i),
+                        @as(u32, @intCast(queue_family_i)),
                         surface,
                     );
                     if (present_support != 0) {
-                        graphics_present_queue_index = @intCast(u32, queue_family_i);
+                        graphics_present_queue_index = @as(u32, @intCast(queue_family_i));
                         break :outer device;
                     }
                 }
@@ -599,12 +604,12 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
     {
         const device_create_info = vk.DeviceCreateInfo{
             .queue_create_info_count = 1,
-            .p_queue_create_infos = @ptrCast([*]vk.DeviceQueueCreateInfo, &vk.DeviceQueueCreateInfo{
+            .p_queue_create_infos = @as([*]const vk.DeviceQueueCreateInfo, @ptrCast(&vk.DeviceQueueCreateInfo{
                 .queue_family_index = graphics_present_queue_index,
                 .queue_count = 1,
                 .p_queue_priorities = &[1]f32{1.0},
                 .flags = .{},
-            }),
+            })),
             .p_enabled_features = &vulkan_config.enabled_device_features,
             .enabled_extension_count = device_extensions.len,
             .pp_enabled_extension_names = &device_extensions,
@@ -716,17 +721,17 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
     {
         var mapped_memory_ptr = (try device_dispatch.mapMemory(logical_device, image_memory, 0, texture_layer_size, .{})).?;
-        texture_memory_map = @ptrCast([*]graphics.RGBA(f32), @alignCast(4, mapped_memory_ptr))[0..texture_pixel_count];
+        texture_memory_map = @as([*]graphics.RGBA(f32), @ptrCast(@alignCast(mapped_memory_ptr)))[0..texture_pixel_count];
 
         // Not sure if this is a hack, but because we multiply the texture sample by the
         // color in the fragment shader, we need pixel in the texture that we known will return 1.0
         // Here we're setting the last pixel to 1.0, which corresponds to a texture mapping of 1.0, 1.0
-        const last_index: usize = (@intCast(usize, texture_layer_dimensions.width) * texture_layer_dimensions.height) - 1;
+        const last_index: usize = (@as(usize, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height) - 1;
         texture_memory_map[last_index].r = 1.0;
         texture_memory_map[last_index].g = 1.0;
         texture_memory_map[last_index].b = 1.0;
         texture_memory_map[last_index].a = 1.0;
-        std.mem.set(graphics.RGBA(f32), texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
+        @memset(texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
     }
 
     const update_texture_command_pool = try device_dispatch.createCommandPool(logical_device, &vk.CommandPoolCreateInfo{
@@ -741,7 +746,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
             .command_pool = update_texture_command_pool,
             .command_buffer_count = 1,
         };
-        try device_dispatch.allocateCommandBuffers(logical_device, &comment_buffer_alloc_info, @ptrCast([*]vk.CommandBuffer, &command_buffer));
+        try device_dispatch.allocateCommandBuffers(logical_device, &comment_buffer_alloc_info, @as([*]vk.CommandBuffer, @ptrCast(&command_buffer)));
     }
 
     try device_dispatch.beginCommandBuffer(command_buffer, &vk.CommandBufferBeginInfo{
@@ -782,7 +787,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         .p_wait_semaphores = undefined,
         .p_wait_dst_stage_mask = undefined,
         .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast([*]vk.CommandBuffer, &command_buffer),
+        .p_command_buffers = @as([*]vk.CommandBuffer, @ptrCast(&command_buffer)),
         .signal_semaphore_count = 0,
         .p_signal_semaphores = undefined,
     }};
@@ -896,13 +901,13 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         try device_dispatch.bindBufferMemory(logical_device, texture_indices_buffer, mesh_memory, indices_range_index_begin);
     }
 
-    mapped_device_memory = @ptrCast([*]u8, (try device_dispatch.mapMemory(logical_device, mesh_memory, 0, memory_size, .{})).?);
+    mapped_device_memory = @as([*]u8, @ptrCast((try device_dispatch.mapMemory(logical_device, mesh_memory, 0, memory_size, .{})).?));
 
     {
         const required_alignment = @alignOf(graphics.GenericVertex);
-        const vertices_addr = @ptrCast(
+        const vertices_addr = @as(
             [*]align(required_alignment) u8,
-            @alignCast(required_alignment, &mapped_device_memory[vertices_range_index_begin]),
+            @ptrCast(@alignCast(&mapped_device_memory[vertices_range_index_begin])),
         );
         const vertices_quad_size: u32 = vertices_range_size / @sizeOf(graphics.GenericVertex);
         quad_face_writer_pool = QuadFaceWriterPool(graphics.GenericVertex).initialize(vertices_addr, vertices_quad_size);
@@ -910,16 +915,16 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
     {
         // We won't be reusing vertices except in making quads so we can pre-generate the entire indices buffer
-        var indices = @ptrCast([*]u16, @alignCast(16, &mapped_device_memory[indices_range_index_begin]));
+        var indices = @as([*]u16, @ptrCast(@alignCast(&mapped_device_memory[indices_range_index_begin])));
 
         var j: u32 = 0;
         while (j < (indices_range_count / 6)) : (j += 1) {
-            indices[j * 6 + 0] = @intCast(u16, j * 4) + 0; // Top left
-            indices[j * 6 + 1] = @intCast(u16, j * 4) + 1; // Top right
-            indices[j * 6 + 2] = @intCast(u16, j * 4) + 2; // Bottom right
-            indices[j * 6 + 3] = @intCast(u16, j * 4) + 0; // Top left
-            indices[j * 6 + 4] = @intCast(u16, j * 4) + 2; // Bottom right
-            indices[j * 6 + 5] = @intCast(u16, j * 4) + 3; // Bottom left
+            indices[j * 6 + 0] = @as(u16, @intCast(j * 4)) + 0; // Top left
+            indices[j * 6 + 1] = @as(u16, @intCast(j * 4)) + 1; // Top right
+            indices[j * 6 + 2] = @as(u16, @intCast(j * 4)) + 2; // Bottom right
+            indices[j * 6 + 3] = @as(u16, @intCast(j * 4)) + 0; // Top left
+            indices[j * 6 + 4] = @as(u16, @intCast(j * 4)) + 2; // Bottom right
+            indices[j * 6 + 5] = @as(u16, @intCast(j * 4)) + 3; // Bottom left
         }
     }
 
@@ -955,7 +960,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         const command_buffer_allocate_info = vk.CommandBufferAllocateInfo{
             .command_pool = command_pool,
             .level = .primary,
-            .command_buffer_count = @intCast(u32, command_buffers.len),
+            .command_buffer_count = @as(u32, @intCast(command_buffers.len)),
         };
         try device_dispatch.allocateCommandBuffers(logical_device, &command_buffer_allocate_info, command_buffers.ptr);
     }
@@ -975,17 +980,17 @@ fn draw() !void {
 
 fn scaleForScreenDimensions(dimensions: Dimensions2D(ScreenPixelBaseType)) Scale2D(f64) {
     return .{
-        .vertical = 2.0 / @intToFloat(f64, dimensions.height),
-        .horizontal = 2.0 / @intToFloat(f64, dimensions.width),
+        .vertical = 2.0 / @as(f64, @floatFromInt(dimensions.height)),
+        .horizontal = 2.0 / @as(f64, @floatFromInt(dimensions.width)),
     };
 }
 
 fn onFramebufferResized(_: glfw.Window, width: u32, height: u32) void {
-    screen_dimensions.width = @intCast(u16, width);
-    screen_dimensions.height = @intCast(u16, height);
+    screen_dimensions.width = @as(u16, @intCast(width));
+    screen_dimensions.height = @as(u16, @intCast(height));
     framebuffer_resized = true;
     quad_face_writer.used = 0;
-    onResize(@intToFloat(f32, width), @intToFloat(f32, height));
+    onResize(@as(f32, @floatFromInt(width)), @as(f32, @floatFromInt(height)));
     draw_requested = true;
 }
 
@@ -1016,7 +1021,7 @@ fn recreateSwapchain() !void {
     _ = try device_dispatch.waitForFences(
         logical_device,
         1,
-        @ptrCast([*]const vk.Fence, &inflight_fences[previous_frame]),
+        @as([*]const vk.Fence, @ptrCast(&inflight_fences[previous_frame])),
         vk.TRUE,
         std.math.maxInt(u64),
     );
@@ -1085,7 +1090,7 @@ fn recreateSwapchain() !void {
         var i: u32 = 0;
         while (i < swapchain_image_views.len) : (i += 1) {
             // We reuse framebuffer_create_info for each framebuffer we create, only we need to update the swapchain_image_view that is attached
-            framebuffer_create_info.p_attachments = @ptrCast([*]vk.ImageView, &swapchain_image_views[i]);
+            framebuffer_create_info.p_attachments = @as([*]vk.ImageView, @ptrCast(&swapchain_image_views[i]));
             framebuffers[i] = try device_dispatch.createFramebuffer(logical_device, &framebuffer_create_info, null);
         }
     }
@@ -1101,7 +1106,7 @@ fn recordRenderPass() !void {
     _ = try device_dispatch.waitForFences(
         logical_device,
         1,
-        @ptrCast([*]const vk.Fence, &inflight_fences[previous_frame]),
+        @as([*]const vk.Fence, @ptrCast(&inflight_fences[previous_frame])),
         vk.TRUE,
         std.math.maxInt(u64),
     );
@@ -1112,7 +1117,7 @@ fn recordRenderPass() !void {
     const clear_colors = [1]vk.ClearValue{
         vk.ClearValue{
             .color = vk.ClearColorValue{
-                .float_32 = @bitCast([4]f32, clear_color),
+                .float_32 = @as([4]f32, @bitCast(clear_color)),
             },
         },
     };
@@ -1144,13 +1149,13 @@ fn recordRenderPass() !void {
                 vk.Viewport{
                     .x = 0.0,
                     .y = 0.0,
-                    .width = @intToFloat(f32, screen_dimensions.width),
-                    .height = @intToFloat(f32, screen_dimensions.height),
+                    .width = @as(f32, @floatFromInt(screen_dimensions.width)),
+                    .height = @as(f32, @floatFromInt(screen_dimensions.height)),
                     .min_depth = 0.0,
                     .max_depth = 1.0,
                 },
             };
-            device_dispatch.cmdSetViewport(command_buffer, 0, 1, @ptrCast([*]const vk.Viewport, &viewports));
+            device_dispatch.cmdSetViewport(command_buffer, 0, 1, @as([*]const vk.Viewport, @ptrCast(&viewports)));
         }
         {
             const scissors = [1]vk.Rect2D{
@@ -1165,7 +1170,7 @@ fn recordRenderPass() !void {
                     },
                 },
             };
-            device_dispatch.cmdSetScissor(command_buffer, 0, 1, @ptrCast([*]const vk.Rect2D, &scissors));
+            device_dispatch.cmdSetScissor(command_buffer, 0, 1, @as([*]const vk.Rect2D, @ptrCast(&scissors)));
         }
 
         device_dispatch.cmdBindVertexBuffers(command_buffer, 0, 1, &[1]vk.Buffer{texture_vertices_buffer}, &[1]vk.DeviceSize{0});
@@ -1192,7 +1197,7 @@ fn renderFrame() !void {
     _ = try device_dispatch.waitForFences(
         logical_device,
         1,
-        @ptrCast([*]const vk.Fence, &inflight_fences[current_frame]),
+        @as([*]const vk.Fence, @ptrCast(&inflight_fences[current_frame])),
         vk.TRUE,
         std.math.maxInt(u64),
     );
@@ -1215,8 +1220,8 @@ fn renderFrame() !void {
         .success => {},
         .error_out_of_date_khr, .suboptimal_khr => {
             const size = window.getFramebufferSize();
-            screen_dimensions.width = @intCast(u16, size.width);
-            screen_dimensions.height = @intCast(u16, size.height);
+            screen_dimensions.width = @as(u16, @intCast(size.width));
+            screen_dimensions.height = @as(u16, @intCast(size.height));
             try recreateSwapchain();
             return;
         },
@@ -1239,18 +1244,18 @@ fn renderFrame() !void {
     const command_submit_info = vk.SubmitInfo{
         .wait_semaphore_count = 1,
         .p_wait_semaphores = &wait_semaphores,
-        .p_wait_dst_stage_mask = @ptrCast([*]align(4) const vk.PipelineStageFlags, &wait_stages),
+        .p_wait_dst_stage_mask = @as([*]align(4) const vk.PipelineStageFlags, @ptrCast(&wait_stages)),
         .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast([*]vk.CommandBuffer, &command_buffers[swapchain_image_index]),
+        .p_command_buffers = @as([*]vk.CommandBuffer, @ptrCast(&command_buffers[swapchain_image_index])),
         .signal_semaphore_count = 1,
         .p_signal_semaphores = &signal_semaphores,
     };
 
-    try device_dispatch.resetFences(logical_device, 1, @ptrCast([*]const vk.Fence, &inflight_fences[current_frame]));
+    try device_dispatch.resetFences(logical_device, 1, @as([*]const vk.Fence, @ptrCast(&inflight_fences[current_frame])));
     try device_dispatch.queueSubmit(
         graphics_present_queue,
         1,
-        @ptrCast([*]const vk.SubmitInfo, &command_submit_info),
+        @as([*]const vk.SubmitInfo, @ptrCast(&command_submit_info)),
         inflight_fences[current_frame],
     );
 
@@ -1260,7 +1265,7 @@ fn renderFrame() !void {
         .p_wait_semaphores = &signal_semaphores,
         .swapchain_count = 1,
         .p_swapchains = &swapchains,
-        .p_image_indices = @ptrCast([*]const u32, &swapchain_image_index),
+        .p_image_indices = @as([*]const u32, @ptrCast(&swapchain_image_index)),
         .p_results = null,
     };
 
@@ -1271,8 +1276,8 @@ fn renderFrame() !void {
         .success => {},
         .error_out_of_date_khr, .suboptimal_khr => {
             const size = window.getFramebufferSize();
-            screen_dimensions.width = @intCast(u16, size.width);
-            screen_dimensions.height = @intCast(u16, size.height);
+            screen_dimensions.width = @as(u16, @intCast(size.width));
+            screen_dimensions.height = @as(u16, @intCast(size.height));
             try recreateSwapchain();
             return;
         },
@@ -1368,7 +1373,7 @@ fn createRenderPass() !void {
 }
 
 fn createDescriptorPool() !void {
-    const swapchain_image_count = @intCast(u32, swapchain_images.len);
+    const swapchain_image_count = @as(u32, @intCast(swapchain_images.len));
     const descriptor_pool_sizes = [_]vk.DescriptorPoolSize{
         .{
             .type = .sampler,
@@ -1400,7 +1405,7 @@ fn createDescriptorSetLayouts() !void {
         }};
         const descriptor_set_layout_create_info = vk.DescriptorSetLayoutCreateInfo{
             .binding_count = 1,
-            .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &descriptor_set_layout_bindings[0]),
+            .p_bindings = @as([*]const vk.DescriptorSetLayoutBinding, @ptrCast(&descriptor_set_layout_bindings[0])),
             .flags = .{},
         };
         descriptor_set_layouts[0] = try device_dispatch.createDescriptorSetLayout(logical_device, &descriptor_set_layout_create_info, null);
@@ -1414,7 +1419,7 @@ fn createDescriptorSetLayouts() !void {
 }
 
 fn createDescriptorSets() !void {
-    const swapchain_image_count = @intCast(u32, swapchain_images.len);
+    const swapchain_image_count = @as(u32, @intCast(swapchain_images.len));
     descriptor_sets = try allocator.alloc(vk.DescriptorSet, swapchain_image_count);
     {
         const descriptor_set_allocator_info = vk.DescriptorSetAllocateInfo{
@@ -1474,7 +1479,7 @@ fn createDescriptorSets() !void {
 
 fn createPipelineLayout() !void {
     const pipeline_layout_create_info = vk.PipelineLayoutCreateInfo{
-        .set_layout_count = @intCast(u32, descriptor_set_layouts.len),
+        .set_layout_count = @as(u32, @intCast(descriptor_set_layouts.len)),
         .p_set_layouts = descriptor_set_layouts.ptr,
         .push_constant_range_count = 0,
         .p_push_constant_ranges = undefined,
@@ -1512,10 +1517,10 @@ fn createGraphicsPipeline() !void {
     };
 
     const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
-        .vertex_binding_description_count = @intCast(u32, 1),
-        .vertex_attribute_description_count = @intCast(u32, 3),
-        .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &vertex_input_binding_descriptions),
-        .p_vertex_attribute_descriptions = @ptrCast([*]const vk.VertexInputAttributeDescription, &vertex_input_attribute_descriptions),
+        .vertex_binding_description_count = @as(u32, @intCast(1)),
+        .vertex_attribute_description_count = @as(u32, @intCast(3)),
+        .p_vertex_binding_descriptions = @as([*]const vk.VertexInputBindingDescription, @ptrCast(&vertex_input_binding_descriptions)),
+        .p_vertex_attribute_descriptions = @as([*]const vk.VertexInputAttributeDescription, @ptrCast(&vertex_input_attribute_descriptions)),
         .flags = .{},
     };
 
@@ -1529,8 +1534,8 @@ fn createGraphicsPipeline() !void {
         vk.Viewport{
             .x = 0.0,
             .y = 0.0,
-            .width = @intToFloat(f32, screen_dimensions.width),
-            .height = @intToFloat(f32, screen_dimensions.height),
+            .width = @as(f32, @floatFromInt(screen_dimensions.width)),
+            .height = @as(f32, @floatFromInt(screen_dimensions.height)),
             .min_depth = 0.0,
             .max_depth = 1.0,
         },
@@ -1597,7 +1602,7 @@ fn createGraphicsPipeline() !void {
         .logic_op_enable = vk.FALSE,
         .logic_op = .copy,
         .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.PipelineColorBlendAttachmentState, &color_blend_attachment),
+        .p_attachments = @as([*]const vk.PipelineColorBlendAttachmentState, @ptrCast(&color_blend_attachment)),
         .blend_constants = blend_constants,
         .flags = .{},
     };
@@ -1605,7 +1610,7 @@ fn createGraphicsPipeline() !void {
     const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
     const dynamic_state_create_info = vk.PipelineDynamicStateCreateInfo{
         .dynamic_state_count = 2,
-        .p_dynamic_states = @ptrCast([*]const vk.DynamicState, &dynamic_states),
+        .p_dynamic_states = @as([*]const vk.DynamicState, @ptrCast(&dynamic_states)),
         .flags = .{},
     };
 
@@ -1661,7 +1666,7 @@ fn createGraphicsPipeline() !void {
         1,
         &pipeline_create_infos,
         null,
-        @ptrCast([*]vk.Pipeline, &graphics_pipeline),
+        @as([*]vk.Pipeline, @ptrCast(&graphics_pipeline)),
     );
 }
 
@@ -1669,7 +1674,7 @@ fn cleanupSwapchain() void {
     device_dispatch.freeCommandBuffers(
         logical_device,
         command_pool,
-        @intCast(u32, command_buffers.len),
+        @as(u32, @intCast(command_buffers.len)),
         command_buffers.ptr,
     );
     allocator.free(command_buffers);
@@ -1697,7 +1702,7 @@ fn createFramebuffers() !void {
     while (i < swapchain_image_views.len) : (i += 1) {
         // We reuse framebuffer_create_info for each framebuffer we create,
         // we only need to update the swapchain_image_view that is attached
-        framebuffer_create_info.p_attachments = @ptrCast([*]vk.ImageView, &swapchain_image_views[i]);
+        framebuffer_create_info.p_attachments = @as([*]vk.ImageView, @ptrCast(&swapchain_image_views[i]));
         framebuffers[i] = try device_dispatch.createFramebuffer(logical_device, &framebuffer_create_info, null);
     }
 }
@@ -1705,7 +1710,7 @@ fn createFramebuffers() !void {
 fn createFragmentShaderModule() !vk.ShaderModule {
     const create_info = vk.ShaderModuleCreateInfo{
         .code_size = shaders.fragment_spv.len,
-        .p_code = @ptrCast([*]const u32, @alignCast(4, shaders.fragment_spv)),
+        .p_code = @as([*]const u32, @ptrCast(@alignCast(shaders.fragment_spv))),
         .flags = .{},
     };
     return try device_dispatch.createShaderModule(logical_device, &create_info, null);
@@ -1714,7 +1719,7 @@ fn createFragmentShaderModule() !vk.ShaderModule {
 fn createVertexShaderModule() !vk.ShaderModule {
     const create_info = vk.ShaderModuleCreateInfo{
         .code_size = shaders.vertex_spv.len,
-        .p_code = @ptrCast([*]const u32, @alignCast(4, shaders.vertex_spv)),
+        .p_code = @as([*]const u32, @ptrCast(@alignCast(shaders.vertex_spv))),
         .flags = .{},
     };
     return try device_dispatch.createShaderModule(logical_device, &create_info, null);

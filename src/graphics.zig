@@ -115,9 +115,9 @@ pub fn generateQuad(
         return extern struct {
             pub fn fromInt(r: u8, g: u8, b: u8) @This() {
                 return .{
-                    .r = @intToFloat(BaseType, r) / 255.0,
-                    .g = @intToFloat(BaseType, g) / 255.0,
-                    .b = @intToFloat(BaseType, b) / 255.0,
+                    .r = @as(BaseType, @floatFromInt(r)) / 255.0,
+                    .g = @as(BaseType, @floatFromInt(g)) / 255.0,
+                    .b = @as(BaseType, @floatFromInt(b)) / 255.0,
                 };
             }
 
@@ -148,10 +148,10 @@ pub fn generateQuad(
         return extern struct {
             pub fn fromInt(comptime IntType: type, r: IntType, g: IntType, b: IntType, a: IntType) @This() {
                 return .{
-                    .r = @intToFloat(BaseType, r) / 255.0,
-                    .g = @intToFloat(BaseType, g) / 255.0,
-                    .b = @intToFloat(BaseType, b) / 255.0,
-                    .a = @intToFloat(BaseType, a) / 255.0,
+                    .r = @as(BaseType, @floatFromInt(r)) / 255.0,
+                    .g = @as(BaseType, @floatFromInt(g)) / 255.0,
+                    .b = @as(BaseType, @floatFromInt(b)) / 255.0,
+                    .a = @as(BaseType, @floatFromInt(a)) / 255.0,
                 };
             }
 
