@@ -75,7 +75,7 @@ pub fn generateQuad(
     pub fn generateQuadColored(
         comptime VertexType: type,
         extent: geometry.Extent2D(TypeOfField(VertexType, "x")),
-        quad_color: RGBA(f32),
+        quad_color: RGBA(u8),
         comptime anchor_point: AnchorPoint,
     ) QuadFace(VertexType) {
         std.debug.assert(TypeOfField(VertexType, "x") == TypeOfField(VertexType, "y"));
@@ -95,11 +95,11 @@ pub fn generateQuad(
         // without changing it. See fragment shader
         tx: f32 = 1.0,
         ty: f32 = 1.0,
-        color: RGBA(f32) = .{
-            .r = 1.0,
-            .g = 1.0,
-            .b = 1.0,
-            .a = 1.0,
+        color: RGBA(u8) = .{
+            .r = 255,
+            .g = 255,
+            .b = 255,
+            .a = 255,
         },
 
         pub fn nullFace() QuadFace(GenericVertex) {
@@ -115,9 +115,9 @@ pub fn generateQuad(
         return extern struct {
             pub fn fromInt(r: u8, g: u8, b: u8) @This() {
                 return .{
-                    .r = @as(BaseType, @floatFromInt(r)) / 255.0,
-                    .g = @as(BaseType, @floatFromInt(g)) / 255.0,
-                    .b = @as(BaseType, @floatFromInt(b)) / 255.0,
+                    .r = r,
+                    .g = g,
+                    .b = b,
                 };
             }
 
@@ -148,10 +148,10 @@ pub fn generateQuad(
         return extern struct {
             pub fn fromInt(comptime IntType: type, r: IntType, g: IntType, b: IntType, a: IntType) @This() {
                 return .{
-                    .r = @as(BaseType, @floatFromInt(r)) / 255.0,
-                    .g = @as(BaseType, @floatFromInt(g)) / 255.0,
-                    .b = @as(BaseType, @floatFromInt(b)) / 255.0,
-                    .a = @as(BaseType, @floatFromInt(a)) / 255.0,
+                    .r = r,
+                    .g = g,
+                    .b = b,
+                    .a = a,
                 };
             }
 

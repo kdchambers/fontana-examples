@@ -40,7 +40,7 @@ const max_texture_quads_per_render: u32 = 1024;
 const max_frames_in_flight: u32 = 2;
 
 /// Size in bytes of each texture layer (Not including padding, etc)
-const texture_layer_size = @sizeOf(graphics.RGBA(f32)) * @as(u64, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height;
+const texture_layer_size = @sizeOf(graphics.RGBA(u8)) * @as(u64, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height;
 const texture_pixel_count = @as(u32, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height;
 
 const indices_range_index_begin = 0;
@@ -55,7 +55,7 @@ const indices_per_quad = 6;
 
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
-const texture_size_bytes = texture_layer_dimensions.width * texture_layer_dimensions.height * @sizeOf(graphics.RGBA(f32));
+const texture_size_bytes = texture_layer_dimensions.width * texture_layer_dimensions.height * @sizeOf(graphics.RGBA(u8));
 
 const ScreenPixelBaseType = u16;
 const ScreenNormalizedBaseType = f32;
@@ -65,11 +65,11 @@ const TextureNormalizedBaseType = f32;
 
 pub const Texture = struct {
     dimensions: Dimensions2D(u16),
-    pixels: [*]graphics.RGBA(f32),
+    pixels: [*]graphics.RGBA(u8),
 
     pub fn clear(self: *Texture) void {
         const pixel_count = self.dimensions.width * self.dimensions.height;
-        @memset(self.pixels[0..pixel_count], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
+        @memset(self.pixels[0..pixel_count], .{ .r = 0, .g = 0, .b = 0, .a = 0 });
     }
 };
 
@@ -213,7 +213,7 @@ var command_buffers: []vk.CommandBuffer = undefined;
 var images_available: []vk.Semaphore = undefined;
 var renders_finished: []vk.Semaphore = undefined;
 var inflight_fences: []vk.Fence = undefined;
-var texture_memory_map: []graphics.RGBA(f32) = undefined;
+var texture_memory_map: []graphics.RGBA(u8) = undefined;
 
 var allocator: std.mem.Allocator = undefined;
 
@@ -332,7 +332,7 @@ pub fn uploadTexture() !void {
         .flags = .{},
         .image = texture_image,
         .view_type = .@"2d_array",
-        .format = .r32g32b32a32_sfloat,
+        .format = .r8g8b8a8_unorm,
         .subresource_range = .{
             .aspect_mask = .{ .color_bit = true },
             .base_mip_level = 0,
@@ -689,7 +689,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         const image_create_info = vk.ImageCreateInfo{
             .flags = .{},
             .image_type = .@"2d",
-            .format = .r32g32b32a32_sfloat,
+            .format = .r8g8b8a8_unorm,
             .tiling = .linear,
             .extent = vk.Extent3D{
                 .width = texture_layer_dimensions.width,
@@ -721,17 +721,17 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
     {
         var mapped_memory_ptr = (try device_dispatch.mapMemory(logical_device, image_memory, 0, texture_layer_size, .{})).?;
-        texture_memory_map = @as([*]graphics.RGBA(f32), @ptrCast(@alignCast(mapped_memory_ptr)))[0..texture_pixel_count];
+        texture_memory_map = @as([*]graphics.RGBA(u8), @ptrCast(@alignCast(mapped_memory_ptr)))[0..texture_pixel_count];
 
         // Not sure if this is a hack, but because we multiply the texture sample by the
         // color in the fragment shader, we need pixel in the texture that we known will return 1.0
         // Here we're setting the last pixel to 1.0, which corresponds to a texture mapping of 1.0, 1.0
         const last_index: usize = (@as(usize, @intCast(texture_layer_dimensions.width)) * texture_layer_dimensions.height) - 1;
-        texture_memory_map[last_index].r = 1.0;
-        texture_memory_map[last_index].g = 1.0;
-        texture_memory_map[last_index].b = 1.0;
-        texture_memory_map[last_index].a = 1.0;
-        @memset(texture_memory_map[0 .. last_index - 1], .{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
+        texture_memory_map[last_index].r = 255;
+        texture_memory_map[last_index].g = 255;
+        texture_memory_map[last_index].b = 255;
+        texture_memory_map[last_index].a = 255;
+        @memset(texture_memory_map[0 .. last_index - 1], .{ .r = 0, .g = 0, .b = 0, .a = 0 });
     }
 
     const update_texture_command_pool = try device_dispatch.createCommandPool(logical_device, &vk.CommandPoolCreateInfo{
@@ -798,7 +798,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         .flags = .{},
         .image = texture_image,
         .view_type = .@"2d_array",
-        .format = .r32g32b32a32_sfloat,
+        .format = .r8g8b8a8_unorm,
         .subresource_range = .{
             .aspect_mask = .{ .color_bit = true },
             .base_mip_level = 0,
@@ -1447,7 +1447,7 @@ fn createDescriptorSets() !void {
         .border_color = .int_opaque_black,
         .min_lod = 0.0,
         .max_lod = 0.0,
-        .unnormalized_coordinates = vk.FALSE,
+        .unnormalized_coordinates = vk.TRUE,
         .compare_enable = vk.FALSE,
         .compare_op = .always,
         .mipmap_mode = .linear,
@@ -1505,7 +1505,7 @@ fn createGraphicsPipeline() !void {
         vk.VertexInputAttributeDescription{ // inColor
             .binding = 0,
             .location = 2,
-            .format = .r32g32b32a32_sfloat,
+            .format = .r8g8b8a8_unorm,
             .offset = 16,
         },
     };
