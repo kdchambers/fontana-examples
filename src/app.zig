@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("glfw");
+const glfw = @import("mach-glfw");
 const vk = @import("vulkan");
 const vulkan_config = @import("vulkan_config.zig");
 const graphics = @import("graphics.zig");
@@ -652,7 +652,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
         const minimum_space_required: u32 = mib * 20;
 
         var memory_type_index: u32 = 0;
-        var memory_type_count = memory_properties.memory_type_count;
+        const memory_type_count = memory_properties.memory_type_count;
 
         var suitable_memory_type_index_opt: ?u32 = null;
 
@@ -712,7 +712,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
     const texture_memory_requirements = device_dispatch.getImageMemoryRequirements(logical_device, texture_image);
     std.debug.assert(texture_layer_size <= texture_memory_requirements.size);
 
-    var image_memory = try device_dispatch.allocateMemory(logical_device, &vk.MemoryAllocateInfo{
+    const image_memory = try device_dispatch.allocateMemory(logical_device, &vk.MemoryAllocateInfo{
         .allocation_size = texture_memory_requirements.size,
         .memory_type_index = mesh_memory_index,
     }, null);
@@ -720,7 +720,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
     try device_dispatch.bindImageMemory(logical_device, texture_image, image_memory, 0);
 
     {
-        var mapped_memory_ptr = (try device_dispatch.mapMemory(logical_device, image_memory, 0, texture_layer_size, .{})).?;
+        const mapped_memory_ptr = (try device_dispatch.mapMemory(logical_device, image_memory, 0, texture_layer_size, .{})).?;
         texture_memory_map = @as([*]graphics.RGBA(u8), @ptrCast(@alignCast(mapped_memory_ptr)))[0..texture_pixel_count];
 
         // Not sure if this is a hack, but because we multiply the texture sample by the
@@ -868,7 +868,7 @@ pub fn init(backing_allocator: std.mem.Allocator, app_title: [:0]const u8) !void
 
     std.debug.assert(vertices_range_index_begin + vertices_range_size <= memory_size);
 
-    var mesh_memory = try device_dispatch.allocateMemory(logical_device, &vk.MemoryAllocateInfo{
+    const mesh_memory = try device_dispatch.allocateMemory(logical_device, &vk.MemoryAllocateInfo{
         .allocation_size = memory_size,
         .memory_type_index = mesh_memory_index,
     }, null);
@@ -1739,7 +1739,7 @@ fn selectSurfaceFormat() !void {
         return error.VulkanSurfaceContainsNoSupportedFormats;
     }
 
-    var formats: []vk.SurfaceFormatKHR = try allocator.alloc(vk.SurfaceFormatKHR, format_count);
+    const formats: []vk.SurfaceFormatKHR = try allocator.alloc(vk.SurfaceFormatKHR, format_count);
     defer allocator.free(formats);
 
     if (.success != (try instance_dispatch.getPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, formats.ptr))) {

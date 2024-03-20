@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2023 Keith Chambers
+// Copyright (c) 2024 Keith Chambers
 
 const std = @import("std");
 const fontana = @import("fontana");
@@ -21,13 +21,15 @@ const TextWriterInterface = struct {
         self: *@This(),
         screen_extent: geometry.Extent2D(f32),
         texture_extent: geometry.Extent2D(f32),
-    ) !void {
-        (try self.quad_writer.create()).* = graphics.generateTexturedQuad(
+    ) f32 {
+        const quad_ptr = self.quad_writer.create() catch return 0.0;
+        quad_ptr.* = graphics.generateTexturedQuad(
             GenericVertex,
             screen_extent,
             texture_extent,
             .bottom_left,
         );
+        return 0.0;
     }
 };
 
@@ -47,12 +49,12 @@ const point_size_small: f64 = 11.0;
 //
 // Color code the container rectangles
 //
-const color_fontana_small = graphics.RGBA(f32).fromInt(u8, 35, 65, 45, 255);
-const color_fontana_large = graphics.RGBA(f32).fromInt(u8, 45, 75, 55, 255);
-const color_freetype_small = graphics.RGBA(f32).fromInt(u8, 75, 45, 55, 255);
-const color_freetype_large = graphics.RGBA(f32).fromInt(u8, 85, 55, 65, 255);
-const color_harfbuzz_small = graphics.RGBA(f32).fromInt(u8, 50, 51, 31, 255);
-const color_harfbuzz_large = graphics.RGBA(f32).fromInt(u8, 60, 61, 41, 255);
+const color_fontana_small = graphics.RGBA(u8).fromInt(u8, 35, 65, 45, 255);
+const color_fontana_large = graphics.RGBA(u8).fromInt(u8, 45, 75, 55, 255);
+const color_freetype_small = graphics.RGBA(u8).fromInt(u8, 75, 45, 55, 255);
+const color_freetype_large = graphics.RGBA(u8).fromInt(u8, 85, 55, 65, 255);
+const color_harfbuzz_small = graphics.RGBA(u8).fromInt(u8, 50, 51, 31, 255);
+const color_harfbuzz_large = graphics.RGBA(u8).fromInt(u8, 60, 61, 41, 255);
 
 //
 // This may be wrong and lead to incorrect results, depending on your physical output display
@@ -75,6 +77,7 @@ const standard_type_overrides = fontana.OverridableTypes{
     .Extent2DNative = geometry.Extent2D(f32),
     .Coordinates2DNative = geometry.Coordinates2D(f32),
     .Scale2D = geometry.Scale2D(f64),
+    .Dimensions2DNative = geometry.Dimensions2D(f32),
 };
 
 //
@@ -83,8 +86,8 @@ const standard_type_overrides = fontana.OverridableTypes{
 // has a default PixelType that can be used.
 //
 const standard_pen_options = fontana.PenOptions{
-    .pixel_format = .r32g32b32a32,
-    .PixelType = graphics.RGBA(f32),
+    .pixel_format = .r8g8b8a8,
+    .PixelType = graphics.RGBA(u8),
 };
 
 //
@@ -120,7 +123,7 @@ var pen_harfbuzz_small: ?FontFreetypeHarfbuzz.PenConfig(standard_pen_options) = 
 var pen_harfbuzz_large: ?FontFreetypeHarfbuzz.PenConfig(standard_pen_options) = null;
 
 pub fn main() !void {
-    var allocator = if (is_debug) gpa.allocator() else std.heap.c_allocator;
+    const allocator = if (is_debug) gpa.allocator() else std.heap.c_allocator;
     defer {
         if (comptime is_debug) {
             _ = gpa.deinit();
@@ -196,7 +199,7 @@ pub fn main() !void {
         points_per_pixel,
         atlas_codepoints,
         texture.dimensions.width,
-        @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+        texture.pixels,
         &atlas,
     );
     pen_fontana_large = try fontana_font.createPen(
@@ -206,7 +209,7 @@ pub fn main() !void {
         points_per_pixel,
         atlas_codepoints,
         texture.dimensions.width,
-        @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+        @ptrCast(@alignCast(texture.pixels)),
         &atlas,
     );
     defer pen_fontana_small.deinit(allocator);
@@ -220,7 +223,7 @@ pub fn main() !void {
             points_per_pixel,
             atlas_codepoints,
             texture.dimensions.width,
-            @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+            @ptrCast(@alignCast(texture.pixels)),
             &atlas,
         );
         pen_freetype_large = try freetype_font.createPen(
@@ -230,7 +233,7 @@ pub fn main() !void {
             points_per_pixel,
             atlas_codepoints,
             texture.dimensions.width,
-            @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+            @ptrCast(@alignCast(texture.pixels)),
             &atlas,
         );
     }
@@ -249,7 +252,7 @@ pub fn main() !void {
             points_per_pixel,
             atlas_codepoints,
             texture.dimensions.width,
-            @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+            @ptrCast(@alignCast(texture.pixels)),
             &atlas,
         );
         pen_harfbuzz_large = try harfbuzz_font.createPen(
@@ -259,7 +262,7 @@ pub fn main() !void {
             points_per_pixel,
             atlas_codepoints,
             texture.dimensions.width,
-            @ptrCast([*]graphics.RGBA(f32), texture.pixels),
+            @ptrCast(@alignCast(texture.pixels)),
             &atlas,
         );
     }
@@ -271,7 +274,7 @@ pub fn main() !void {
     }
 
     const font_setup_end = std.time.nanoTimestamp();
-    const font_setup_duration = @intCast(u64, font_setup_end - font_setup_start);
+    const font_setup_duration: u64 = @intCast(font_setup_end - font_setup_start);
     std.log.info("Font setup in {} in mode `{s}`", .{
         std.fmt.fmtDuration(font_setup_duration),
         @tagName(build_mode),
@@ -288,12 +291,12 @@ fn onResize(width: f32, height: f32) void {
     const scale_factor = app.scaleFactor();
 
     const large_container_dimensions = geometry.Dimensions2D(f32){
-        .width = @floatCast(f32, 800 * scale_factor.horizontal),
-        .height = @floatCast(f32, 80 * scale_factor.vertical),
+        .width = @floatCast(800 * scale_factor.horizontal),
+        .height = @floatCast(80 * scale_factor.vertical),
     };
     const small_container_dimensions = geometry.Dimensions2D(f32){
-        .width = @floatCast(f32, 600 * scale_factor.horizontal),
-        .height = @floatCast(f32, 60 * scale_factor.vertical),
+        .width = @floatCast(600 * scale_factor.horizontal),
+        .height = @floatCast(60 * scale_factor.vertical),
     };
 
     const placement_x_small: f32 = -1.0 + ((2.0 - small_container_dimensions.width) / 2.0);
@@ -306,7 +309,7 @@ fn onResize(width: f32, height: f32) void {
         return;
     };
 
-    const y_offset = @floatCast(f32, 100 * scale_factor.vertical);
+    const y_offset: f32 = @floatCast(100 * scale_factor.vertical);
 
     {
         const container_extent_small = geometry.Extent2D(f32){

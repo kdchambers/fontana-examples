@@ -3,13 +3,10 @@
 
 const std = @import("std");
 
-const vkgen = @import("libs/vulkan-zig/generator/index.zig");
-
-const Builder = std.build.Builder;
-const Build = std.build;
+const Build = std.Build;
 const Pkg = Build.Pkg;
 
-pub fn build(b: *Builder) !void {
+pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -21,24 +18,31 @@ pub fn build(b: *Builder) !void {
     });
 
     const module_shaders = b.createModule(.{
-        .source_file = .{ .path = "shaders/shaders.zig" },
-        .dependencies = &.{},
+        .root_source_file = .{ .path = "shaders/shaders.zig" },
     });
 
-    const module_fontana = b.createModule(.{
-        .source_file = .{ .path = "libs/fontana/src/fontana.zig" },
-        .dependencies = &.{},
+    exe.root_module.addImport("shaders", module_shaders);
+
+    const vkzig_dep = b.dependency("vulkan_zig", .{
+        .registry = @as([]const u8, b.pathFromRoot("vk.xml")),
     });
-    exe.addModule("shaders", module_shaders);
-    exe.addModule("fontana", module_fontana);
+    const vkzig_bindings = vkzig_dep.module("vulkan-zig");
+    exe.root_module.addImport("vulkan", vkzig_bindings);
 
-    const gen = vkgen.VkGenerateStep.create(b, "vk.xml");
-    exe.addModule("vulkan", gen.getModule());
+    const glfw_dep = b.dependency("mach_glfw", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
-    glfwLink(b, exe);
+    const fontana_dep = b.dependency("fontana", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const fontana_module = fontana_dep.module("fontana");
+    exe.root_module.addImport("fontana", fontana_module);
 
     exe.linkLibC();
-
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -47,28 +51,4 @@ pub fn build(b: *Builder) !void {
 
     const run_step = b.step("run", "Run fontana-example");
     run_step.dependOn(&run_cmd.step);
-}
-
-// NOTE: This is a hack while the mach-glfw build system is stabalizing
-fn glfwLink(b: *std.Build, step: *std.build.CompileStep) void {
-    const glfw_dep = b.dependency("mach_glfw", .{
-        .target = step.target,
-        .optimize = step.optimize,
-    });
-    step.linkLibrary(glfw_dep.artifact("mach-glfw"));
-    step.addModule("glfw", glfw_dep.module("mach-glfw"));
-
-    @import("glfw").addPaths(step);
-    step.linkLibrary(b.dependency("vulkan_headers", .{
-        .target = step.target,
-        .optimize = step.optimize,
-    }).artifact("vulkan-headers"));
-    step.linkLibrary(b.dependency("x11_headers", .{
-        .target = step.target,
-        .optimize = step.optimize,
-    }).artifact("x11-headers"));
-    step.linkLibrary(b.dependency("wayland_headers", .{
-        .target = step.target,
-        .optimize = step.optimize,
-    }).artifact("wayland-headers"));
 }
